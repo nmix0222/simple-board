@@ -33,12 +33,15 @@ export function SupabaseAuthProvider({ children }) {
   }, []);
 
   async function signUp({ email, password, nickname }) {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { nickname } }
     });
     if (error) throw error;
+    // 이메일 인증이 꺼져 있는 프로젝트라면 signUp이 바로 세션을 돌려줌 —
+    // 그 경우 즉시 로그인 상태가 되므로 게시판으로 바로 이동해도 안전하다.
+    return { immediateSession: !!data.session };
   }
 
   async function signIn({ email, password }) {

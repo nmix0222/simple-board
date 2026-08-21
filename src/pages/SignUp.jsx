@@ -25,8 +25,12 @@ export default function SignUp() {
     }
     setSubmitting(true);
     try {
-      await signUp({ email: email.trim(), password, nickname: nickname.trim() });
-      setDone(true);
+      const { immediateSession } = await signUp({ email: email.trim(), password, nickname: nickname.trim() });
+      if (immediateSession) {
+        navigate('/');
+      } else {
+        setDone(true);
+      }
     } catch (err) {
       if (err.message?.includes('already registered')) {
         setError('이미 가입된 이메일입니다.');
@@ -42,8 +46,9 @@ export default function SignUp() {
     return (
       <div className="write-box">
         <h2>회원가입 완료</h2>
-        <p>입력하신 이메일로 인증 메일을 보냈습니다. 메일함에서 인증 링크를 눌러주셔야 로그인할 수 있습니다.</p>
-        <div className="actions">
+        <p>입력하신 이메일로 인증 메일을 보냈습니다. 메일함에서 인증 링크를 눌러주셔야 글쓰기·댓글 작성이 가능합니다.</p>
+        <div className="actions" style={{ gap: 8 }}>
+          <button className="btn-secondary" onClick={() => navigate('/')}>게시판 둘러보기</button>
           <button className="btn-primary" onClick={() => navigate('/signin')}>로그인하러 가기</button>
         </div>
       </div>
