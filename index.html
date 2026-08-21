@@ -194,6 +194,66 @@
     margin-right: 6px;
     vertical-align: middle;
   }
+  .auth-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .auth-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .auth-tab {
+    flex: 1;
+    background: var(--bg);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 6px;
+  }
+  .auth-tab.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .auth-panel .row:last-child {
+    margin-bottom: 0;
+  }
+  .auth-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 4px 2px 8px;
+  }
+  .user-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+  .btn-secondary {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover {
+    background: #ebedf0;
+  }
+  .login-required {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 10px 0;
+  }
 </style>
 </head>
 <body>
@@ -201,11 +261,12 @@
   <h1>📋 간단 게시판</h1>
 </header>
 <main>
-  <section class="write-box">
+  <div id="authSection"></div>
+
+  <section class="write-box" id="writeBox">
     <h2>글쓰기</h2>
     <div class="row">
       <select id="categoryInput"></select>
-      <input type="text" id="authorInput" placeholder="이름" style="max-width:150px;">
     </div>
     <div class="row">
       <input type="text" id="titleInput" placeholder="제목">
@@ -228,8 +289,185 @@
 
 <script>
   const STORAGE_KEY = 'simple-board-posts';
+  const USERS_KEY = 'simple-board-users';
+  const SESSION_KEY = 'simple-board-current-user';
   const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문'];
   let currentCategory = '전체';
+  let authTab = 'login';
+
+  async function hashPassword(password) {
+    const data = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  function loadUsers() {
+    try {
+      const raw = localStorage.getItem(USERS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }
+
+  function getCurrentUser() {
+    return localStorage.getItem(SESSION_KEY);
+  }
+
+  function setCurrentUser(username) {
+    if (username) {
+      localStorage.setItem(SESSION_KEY, username);
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }
+
+  function renderAuth() {
+    const authSection = document.getElementById('authSection');
+    const currentUser = getCurrentUser();
+
+    if (currentUser) {
+      authSection.innerHTML = `
+        <div class="user-bar">
+          <span><strong>${escapeHtml(currentUser)}</strong>님 환영합니다</span>
+          <button class="btn-secondary" onclick="doLogout()">로그아웃</button>
+        </div>
+      `;
+    } else {
+      authSection.innerHTML = `
+        <div class="auth-box">
+          <div class="auth-tabs">
+            <button type="button" class="auth-tab${authTab === 'login' ? ' active' : ''}" data-tab="login">로그인</button>
+            <button type="button" class="auth-tab${authTab === 'signup' ? ' active' : ''}" data-tab="signup">회원가입</button>
+          </div>
+          <div class="auth-panel" style="display:${authTab === 'login' ? 'block' : 'none'}">
+            <div class="row">
+              <input type="text" id="loginUsername" placeholder="아이디">
+            </div>
+            <div class="row">
+              <input type="password" id="loginPassword" placeholder="비밀번호">
+            </div>
+            <div class="actions">
+              <button class="btn-primary" onclick="doLogin()">로그인</button>
+            </div>
+          </div>
+          <div class="auth-panel" style="display:${authTab === 'signup' ? 'block' : 'none'}">
+            <div class="row">
+              <input type="text" id="signupUsername" placeholder="아이디 (2자 이상)">
+            </div>
+            <div class="row">
+              <input type="password" id="signupPassword" placeholder="비밀번호 (4자 이상)">
+            </div>
+            <div class="auth-hint">※ 이 계정은 이 브라우저에만 저장됩니다. 연습/개인용으로만 사용하세요.</div>
+            <div class="actions">
+              <button class="btn-primary" onclick="doSignup()">가입하기</button>
+            </div>
+          </div>
+        </div>
+      `;
+      authSection.querySelectorAll('.auth-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          authTab = btn.dataset.tab;
+          renderAuth();
+        });
+      });
+    }
+
+    updateWriteBoxVisibility();
+  }
+
+  function updateWriteBoxVisibility() {
+    const writeBox = document.getElementById('writeBox');
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      writeBox.innerHTML = `
+        <h2>글쓰기 <span style="font-weight:400;font-size:13px;color:var(--muted);">(${escapeHtml(currentUser)})</span></h2>
+        <div class="row">
+          <select id="categoryInput"></select>
+        </div>
+        <div class="row">
+          <input type="text" id="titleInput" placeholder="제목">
+        </div>
+        <div class="row">
+          <textarea id="contentInput" placeholder="내용을 입력하세요"></textarea>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" onclick="addPost()">등록</button>
+        </div>
+      `;
+      initCategorySelect();
+    } else {
+      writeBox.innerHTML = `
+        <h2>글쓰기</h2>
+        <div class="login-required">로그인 후 글을 작성할 수 있습니다.</div>
+      `;
+    }
+  }
+
+  async function doSignup() {
+    const usernameInput = document.getElementById('signupUsername');
+    const passwordInput = document.getElementById('signupPassword');
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+
+    if (username.length < 2) {
+      alert('아이디는 2자 이상 입력해주세요.');
+      return;
+    }
+    if (password.length < 4) {
+      alert('비밀번호는 4자 이상 입력해주세요.');
+      return;
+    }
+
+    const users = loadUsers();
+    if (users.some(u => u.username === username)) {
+      alert('이미 존재하는 아이디입니다.');
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+    users.push({ username, passwordHash });
+    saveUsers(users);
+    setCurrentUser(username);
+    renderAuth();
+    render();
+  }
+
+  async function doLogin() {
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+
+    const users = loadUsers();
+    const user = users.find(u => u.username === username);
+    if (!user) {
+      alert('존재하지 않는 아이디입니다.');
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+    if (passwordHash !== user.passwordHash) {
+      alert('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    setCurrentUser(username);
+    renderAuth();
+    render();
+  }
+
+  function doLogout() {
+    setCurrentUser(null);
+    renderAuth();
+    render();
+  }
 
   function initCategorySelect() {
     const select = document.getElementById('categoryInput');
@@ -302,7 +540,7 @@
           <div class="post-body">${escapeHtml(post.content)}</div>
           <div class="post-footer">
             <span class="post-author">${escapeHtml(post.author || '익명')}</span>
-            <button class="btn-delete" onclick="deletePost(${post.id})">삭제</button>
+            ${post.author === getCurrentUser() ? `<button class="btn-delete" onclick="deletePost(${post.id})">삭제</button>` : ''}
           </div>
         </article>
       `)
@@ -310,15 +548,19 @@
   }
 
   function addPost() {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      alert('로그인 후 이용해주세요.');
+      return;
+    }
+
     const categoryInput = document.getElementById('categoryInput');
-    const authorInput = document.getElementById('authorInput');
     const titleInput = document.getElementById('titleInput');
     const contentInput = document.getElementById('contentInput');
 
     const category = categoryInput.value;
     const title = titleInput.value.trim();
     const content = contentInput.value.trim();
-    const author = authorInput.value.trim();
 
     if (!title || !content) {
       alert('제목과 내용을 입력해주세요.');
@@ -329,7 +571,7 @@
     posts.push({
       id: Date.now(),
       category,
-      author,
+      author: currentUser,
       title,
       content
     });
@@ -341,13 +583,18 @@
   }
 
   function deletePost(id) {
+    const posts = loadPosts();
+    const post = posts.find(p => p.id === id);
+    if (!post || post.author !== getCurrentUser()) {
+      alert('본인 글만 삭제할 수 있습니다.');
+      return;
+    }
     if (!confirm('이 글을 삭제하시겠습니까?')) return;
-    const posts = loadPosts().filter(p => p.id !== id);
-    savePosts(posts);
+    savePosts(posts.filter(p => p.id !== id));
     render();
   }
 
-  initCategorySelect();
+  renderAuth();
   initTabs();
   render();
 </script>
