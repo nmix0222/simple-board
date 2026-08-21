@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>간단 게시판</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #e2e4e9;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --danger: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 16px;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 22px;
+  }
+  main {
+    max-width: 720px;
+    margin: 24px auto;
+    padding: 0 16px 60px;
+  }
+  .write-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .write-box h2 {
+    margin: 0 0 12px;
+    font-size: 16px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  input, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: var(--text);
+  }
+  textarea {
+    min-height: 90px;
+    resize: vertical;
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .post {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .post-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .post-title {
+    font-size: 16px;
+    font-weight: 700;
+    word-break: break-word;
+  }
+  .post-meta {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    margin-left: 10px;
+  }
+  .post-body {
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #374151;
+  }
+  .post-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+  }
+  .post-author {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .btn-delete {
+    background: transparent;
+    color: var(--danger);
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .btn-delete:hover {
+    text-decoration: underline;
+  }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 0;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 간단 게시판</h1>
+</header>
+<main>
+  <section class="write-box">
+    <h2>글쓰기</h2>
+    <div class="row">
+      <input type="text" id="authorInput" placeholder="이름" style="max-width:150px;">
+      <input type="text" id="titleInput" placeholder="제목">
+    </div>
+    <div class="row">
+      <textarea id="contentInput" placeholder="내용을 입력하세요"></textarea>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" onclick="addPost()">등록</button>
+    </div>
+  </section>
+
+  <div class="list-header">
+    <span id="countLabel">0개의 글</span>
+  </div>
+  <section id="postList"></section>
+</main>
+
+<script>
+  const STORAGE_KEY = 'simple-board-posts';
+
+  function loadPosts() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function savePosts(posts) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function formatDate(ts) {
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function render() {
+    const posts = loadPosts();
+    const list = document.getElementById('postList');
+    const countLabel = document.getElementById('countLabel');
+    countLabel.textContent = `${posts.length}개의 글`;
+
+    if (posts.length === 0) {
+      list.innerHTML = '<div class="empty">아직 등록된 글이 없습니다.</div>';
+      return;
+    }
+
+    list.innerHTML = posts
+      .slice()
+      .sort((a, b) => b.id - a.id)
+      .map(post => `
+        <article class="post">
+          <div class="post-top">
+            <div class="post-title">${escapeHtml(post.title)}</div>
+            <div class="post-meta">${formatDate(post.id)}</div>
+          </div>
+          <div class="post-body">${escapeHtml(post.content)}</div>
+          <div class="post-footer">
+            <span class="post-author">${escapeHtml(post.author || '익명')}</span>
+            <button class="btn-delete" onclick="deletePost(${post.id})">삭제</button>
+          </div>
+        </article>
+      `)
+      .join('');
+  }
+
+  function addPost() {
+    const authorInput = document.getElementById('authorInput');
+    const titleInput = document.getElementById('titleInput');
+    const contentInput = document.getElementById('contentInput');
+
+    const title = titleInput.value.trim();
+    const content = contentInput.value.trim();
+    const author = authorInput.value.trim();
+
+    if (!title || !content) {
+      alert('제목과 내용을 입력해주세요.');
+      return;
+    }
+
+    const posts = loadPosts();
+    posts.push({
+      id: Date.now(),
+      author,
+      title,
+      content
+    });
+    savePosts(posts);
+
+    titleInput.value = '';
+    contentInput.value = '';
+    render();
+  }
+
+  function deletePost(id) {
+    if (!confirm('이 글을 삭제하시겠습니까?')) return;
+    const posts = loadPosts().filter(p => p.id !== id);
+    savePosts(posts);
+    render();
+  }
+
+  render();
+</script>
+</body>
+</html>
