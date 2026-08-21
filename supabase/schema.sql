@@ -1,7 +1,38 @@
 -- ============================================================
 -- 게시판 프로젝트 Supabase 스키마 + RLS 정책
 -- Supabase 대시보드 > SQL Editor 에서 전체를 한 번에 실행하세요.
+-- 출처가 불명확한 기존 테이블(정수 id + name_ko 구조의 categories 등)이
+-- 남아있을 수 있어, 실행 전에 관련 객체를 먼저 깨끗이 지웁니다.
+-- 현재 이 프로젝트에는 실제 사용자 데이터가 없는 것으로 확인했습니다.
 -- ============================================================
+
+drop view if exists rolling_paper_messages_public cascade;
+drop view if exists rolling_papers_public cascade;
+drop table if exists admin_activity_logs cascade;
+drop table if exists user_restrictions cascade;
+drop table if exists notices cascade;
+drop table if exists report_actions cascade;
+drop table if exists reports cascade;
+drop table if exists rolling_paper_reactions cascade;
+drop table if exists rolling_paper_messages cascade;
+drop table if exists rolling_papers cascade;
+drop table if exists post_likes cascade;
+drop table if exists comments cascade;
+drop table if exists posts cascade;
+drop table if exists categories cascade;
+drop table if exists profiles cascade;
+drop function if exists is_admin() cascade;
+drop function if exists handle_new_user() cascade;
+drop function if exists prevent_role_self_elevation() cascade;
+drop function if exists protect_post_moderation_fields() cascade;
+drop function if exists increment_post_view(uuid) cascade;
+drop function if exists bump_post_comment_count() cascade;
+drop function if exists bump_post_like_count() cascade;
+drop function if exists create_rolling_paper(text, uuid, text, text, text, text, boolean, timestamptz) cascade;
+drop function if exists verify_rolling_paper_passkey(uuid, text) cascade;
+drop function if exists can_access_rolling_paper(uuid) cascade;
+drop function if exists post_rolling_paper_message(uuid, text, boolean, text) cascade;
+drop trigger if exists on_auth_user_created on auth.users;
 
 create extension if not exists pgcrypto;
 
