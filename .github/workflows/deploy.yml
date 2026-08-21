@@ -28,6 +28,8 @@ jobs:
         env:
           VITE_ADSENSE_CLIENT: ${{ secrets.VITE_ADSENSE_CLIENT }}
           VITE_ADSENSE_SLOT: ${{ secrets.VITE_ADSENSE_SLOT }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

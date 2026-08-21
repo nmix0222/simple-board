@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './AuthContext.jsx';
+import { SupabaseAuthProvider } from './SupabaseAuthContext.jsx';
 import { ThemeProvider } from './ThemeContext.jsx';
 import './index.css';
 
@@ -18,11 +19,13 @@ if (adsenseClient) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider>
-      <AuthProvider>
-        <HashRouter>
-          <App />
-        </HashRouter>
-      </AuthProvider>
+      <SupabaseAuthProvider>
+        <AuthProvider>
+          <HashRouter>
+            <App />
+          </HashRouter>
+        </AuthProvider>
+      </SupabaseAuthProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

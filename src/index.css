@@ -80,6 +80,25 @@ header.site-header {
   justify-content: center;
 }
 .theme-toggle:hover { border-color: var(--accent); }
+.auth-strip {
+  max-width: 720px;
+  margin: 8px auto 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.auth-strip a:hover { color: var(--accent); }
+.link-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.link-btn:hover { color: var(--accent); }
 
 main {
   max-width: 720px;
