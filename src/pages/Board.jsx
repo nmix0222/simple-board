@@ -23,6 +23,7 @@ export default function Board() {
   const [color, setColor] = useState(POST_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [newPasskey, setNewPasskey] = useState(null);
+  const [showWriteForm, setShowWriteForm] = useState(false);
 
   const isRollingPaper = category === '롤링페이퍼';
 
@@ -84,9 +85,15 @@ export default function Board() {
       setContent('');
       setPassword('');
       setColor(POST_COLORS[0]);
+      if (!isRollingPaper) setShowWriteForm(false);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function closeWriteForm() {
+    setShowWriteForm(false);
+    setNewPasskey(null);
   }
 
   async function handleReact(id, emoji) {
@@ -95,9 +102,18 @@ export default function Board() {
 
   return (
     <>
-      <section className="write-box">
-        <h2>글쓰기</h2>
-        <form onSubmit={handleSubmit}>
+      <button type="button" className="fab" onClick={() => setShowWriteForm(true)} title="글쓰기">
+        +
+      </button>
+
+      {showWriteForm && (
+        <div className="modal-overlay" onClick={closeWriteForm}>
+          <section className="write-box modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>글쓰기</h2>
+              <button type="button" className="modal-close" onClick={closeWriteForm}>✕</button>
+            </div>
+            <form onSubmit={handleSubmit}>
           <div className="row">
             <select value={category} onChange={e => setCategory(e.target.value)}>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -157,19 +173,21 @@ export default function Board() {
           <div className="actions">
             <button className="btn-primary" type="submit" disabled={submitting}>등록</button>
           </div>
-        </form>
+            </form>
 
-        {newPasskey && (
-          <div className="passkey-display">
-            <div>생성된 패스키</div>
-            <div className="passkey-code">{newPasskey}</div>
-            <div className="passkey-hint">이 패스키가 있어야만 들어올 수 있어요. 꼭 저장/공유해두세요.</div>
-            <div className="actions" style={{ justifyContent: 'center', marginTop: 10 }}>
-              <button className="btn-secondary" type="button" onClick={() => setNewPasskey(null)}>확인</button>
-            </div>
-          </div>
-        )}
-      </section>
+            {newPasskey && (
+              <div className="passkey-display">
+                <div>생성된 패스키</div>
+                <div className="passkey-code">{newPasskey}</div>
+                <div className="passkey-hint">이 패스키가 있어야만 들어올 수 있어요. 꼭 저장/공유해두세요.</div>
+                <div className="actions" style={{ justifyContent: 'center', marginTop: 10 }}>
+                  <button className="btn-secondary" type="button" onClick={closeWriteForm}>확인</button>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       <AdSlot />
 

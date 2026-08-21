@@ -296,3 +296,55 @@ footer.site-footer {
 }
 footer.site-footer a { margin: 0 8px; }
 footer.site-footer a:hover { color: var(--accent); text-decoration: underline; }
+
+.fab {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+  z-index: 1000;
+}
+.fab:hover { background: var(--accent-hover); }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 20, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+  z-index: 2000;
+}
+.modal-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 40px 0;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal-head h2 { margin: 0; }
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  padding: 4px 8px;
+}
+.modal-close:hover { color: var(--text); }
