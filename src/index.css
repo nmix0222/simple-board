@@ -137,6 +137,17 @@ button {
   color: var(--muted);
   font-size: 13px;
 }
+.sort-toggle { display: flex; gap: 4px; }
+.sort-toggle button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+.sort-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.post-category.pinned { background: #fde68a; color: #78350f; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .tab {
   background: var(--card);

@@ -3,6 +3,7 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, query, orderBy, onSnapsh
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 import { sha256Hex } from '../hash.js';
+import { useViewCount } from '../useViewCount.js';
 
 const CARD_COLORS = ['#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5'];
 
@@ -15,6 +16,7 @@ function formatDate(ts) {
 
 export default function RollingPaperCard({ post }) {
   const { isAdmin } = useAuth();
+  useViewCount(post.id);
 
   const [passkeyInput, setPasskeyInput] = useState('');
   const [verifiedHash, setVerifiedHash] = useState(null);
@@ -79,18 +81,30 @@ export default function RollingPaperCard({ post }) {
     }
   }
 
+  async function togglePin() {
+    await updateDoc(doc(db, 'posts', post.id), { pinned: !post.pinned });
+  }
+
   return (
     <article className="post">
       <div className="post-top">
         <div className="post-title">
+          {post.pinned && <span className="post-category pinned">📌 공지</span>}
           <span className="post-category">🔒 롤링페이퍼</span>
           {post.title}
         </div>
-        <div className="post-meta">{formatDate(post.createdAt)}</div>
+        <div className="post-meta">{formatDate(post.createdAt)} · 조회 {post.views || 0}</div>
       </div>
       <div className="post-footer">
         <span className="post-author">{post.author || '익명'}</span>
-        <button type="button" className="btn-delete" onClick={handleDelete}>삭제</button>
+        <span>
+          {isAdmin && (
+            <button type="button" className="btn-delete" onClick={togglePin} style={{ color: 'var(--accent)' }}>
+              {post.pinned ? '고정 해제' : '고정'}
+            </button>
+          )}
+          <button type="button" className="btn-delete" onClick={handleDelete}>삭제</button>
+        </span>
       </div>
 
       {!verifiedHash ? (

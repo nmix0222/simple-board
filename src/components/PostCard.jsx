@@ -3,6 +3,7 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, increment, query, orderB
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 import { sha256Hex } from '../hash.js';
+import { useViewCount } from '../useViewCount.js';
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '👏'];
 const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문'];
@@ -17,6 +18,7 @@ function formatDate(ts) {
 
 export default function PostCard({ post, onReact }) {
   const { isAdmin } = useAuth();
+  useViewCount(post.id);
 
   const [editing, setEditing] = useState(false);
   const [editPassword, setEditPassword] = useState('');
@@ -109,6 +111,10 @@ export default function PostCard({ post, onReact }) {
     }
   }
 
+  async function togglePin() {
+    await updateDoc(doc(db, 'posts', post.id), { pinned: !post.pinned });
+  }
+
   const reactions = post.reactions || {};
 
   if (editing) {
@@ -163,15 +169,21 @@ export default function PostCard({ post, onReact }) {
     >
       <div className="post-top">
         <div className="post-title">
+          {post.pinned && <span className="post-category pinned">📌 공지</span>}
           <span className="post-category">{post.category || '자유'}</span>
           {post.title}
         </div>
-        <div className="post-meta">{formatDate(post.createdAt)}</div>
+        <div className="post-meta">{formatDate(post.createdAt)} · 조회 {post.views || 0}</div>
       </div>
       <div className="post-body">{post.content}</div>
       <div className="post-footer">
         <span className="post-author">{post.author || '익명'}</span>
         <span>
+          {isAdmin && (
+            <button type="button" className="btn-delete" onClick={togglePin} style={{ color: 'var(--accent)' }}>
+              {post.pinned ? '고정 해제' : '고정'}
+            </button>
+          )}
           <button type="button" className="btn-delete" onClick={startEdit} style={{ color: 'var(--accent)' }}>수정</button>
           <button type="button" className="btn-delete" onClick={handleDelete}>삭제</button>
         </span>

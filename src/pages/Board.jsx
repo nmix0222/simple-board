@@ -12,6 +12,8 @@ import RollingPaperCard from '../components/RollingPaperCard.jsx';
 const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문', '롤링페이퍼'];
 const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
 
+const PAGE_SIZE = 20;
+
 export default function Board() {
   const [posts, setPosts] = useState([]);
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -24,6 +26,9 @@ export default function Board() {
   const [submitting, setSubmitting] = useState(false);
   const [newPasskey, setNewPasskey] = useState(null);
   const [showWriteForm, setShowWriteForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sortMode, setSortMode] = useState('latest');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const isRollingPaper = category === '롤링페이퍼';
 
@@ -35,7 +40,32 @@ export default function Board() {
     return unsub;
   }, []);
 
-  const filtered = currentTab === '전체' ? posts : posts.filter(p => p.category === currentTab);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [currentTab, search, sortMode]);
+
+  function reactionTotal(post) {
+    return Object.values(post.reactions || {}).reduce((sum, n) => sum + n, 0);
+  }
+
+  const filtered = (currentTab === '전체' ? posts : posts.filter(p => p.category === currentTab))
+    .filter(p => {
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return (p.title || '').toLowerCase().includes(q) || (p.content || '').toLowerCase().includes(q);
+    });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (!!b.pinned !== !!a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+    if (sortMode === 'popular') {
+      const score = (post) => reactionTotal(post) * 3 + (post.views || 0) + (post.commentCount || 0) * 2;
+      const diff = score(b) - score(a);
+      if (diff !== 0) return diff;
+    }
+    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+  });
+
+  const visiblePosts = sorted.slice(0, visibleCount);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -204,15 +234,40 @@ export default function Board() {
         ))}
       </div>
 
+      <div className="row">
+        <input
+          type="text"
+          placeholder="제목, 내용 검색"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="list-header">
         <span>{filtered.length}개의 글</span>
+        <div className="sort-toggle">
+          <button
+            type="button"
+            className={sortMode === 'latest' ? 'active' : ''}
+            onClick={() => setSortMode('latest')}
+          >
+            최신순
+          </button>
+          <button
+            type="button"
+            className={sortMode === 'popular' ? 'active' : ''}
+            onClick={() => setSortMode('popular')}
+          >
+            인기순
+          </button>
+        </div>
       </div>
 
       <section>
-        {filtered.length === 0 ? (
-          <div className="empty">아직 등록된 글이 없습니다.</div>
+        {sorted.length === 0 ? (
+          <div className="empty">{search.trim() ? '검색 결과가 없습니다.' : '아직 등록된 글이 없습니다.'}</div>
         ) : (
-          filtered.map(post =>
+          visiblePosts.map(post =>
             post.category === '롤링페이퍼' ? (
               <RollingPaperCard key={post.id} post={post} />
             ) : (
@@ -221,6 +276,14 @@ export default function Board() {
           )
         )}
       </section>
+
+      {visibleCount < sorted.length && (
+        <div className="actions" style={{ justifyContent: 'center', marginTop: 4 }}>
+          <button className="btn-secondary" type="button" onClick={() => setVisibleCount(v => v + PAGE_SIZE)}>
+            더보기 ({sorted.length - visibleCount}개 더 있음)
+          </button>
+        </div>
+      )}
     </>
   );
 }

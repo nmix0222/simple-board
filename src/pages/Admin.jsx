@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, deleteDoc, doc, updateDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 
@@ -32,6 +32,10 @@ export default function Admin() {
   async function handleDelete(id) {
     if (!confirm('이 글을 삭제하시겠습니까?')) return;
     await deleteDoc(doc(db, 'posts', id));
+  }
+
+  async function togglePin(post) {
+    await updateDoc(doc(db, 'posts', post.id), { pinned: !post.pinned });
   }
 
   if (!isAdmin) {
@@ -68,14 +72,21 @@ export default function Admin() {
         >
           <div className="post-top">
             <div className="post-title">
+              {post.pinned && <span className="post-category pinned">📌 공지</span>}
               <span className="post-category">{post.category || '자유'}</span>
               {post.title}
             </div>
+            <div className="post-meta">조회 {post.views || 0}</div>
           </div>
           <div className="post-body">{post.content}</div>
           <div className="post-footer">
             <span className="post-author">{post.author || '익명'}</span>
-            <button type="button" className="btn-delete" onClick={() => handleDelete(post.id)}>삭제</button>
+            <span>
+              <button type="button" className="btn-delete" onClick={() => togglePin(post)} style={{ color: 'var(--accent)' }}>
+                {post.pinned ? '고정 해제' : '고정'}
+              </button>
+              <button type="button" className="btn-delete" onClick={() => handleDelete(post.id)}>삭제</button>
+            </span>
           </div>
         </article>
       ))}
