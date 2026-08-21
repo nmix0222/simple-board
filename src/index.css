@@ -13,6 +13,7 @@
   --accent-hover: #1d4ed8;
   --danger: #dc2626;
   --shadow: 0 1px 3px rgba(20, 24, 40, 0.06);
+  --hover-bg: #ebedf0;
 }
 
 :root[data-theme="dark"] {
@@ -30,6 +31,7 @@
   --accent-hover: #7ba0ff;
   --danger: #f16565;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --hover-bg: #2a2e3a;
 }
 
 * { box-sizing: border-box; }
@@ -127,7 +129,7 @@ button {
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
-.btn-secondary:hover { background: #ebedf0; }
+.btn-secondary:hover { background: var(--hover-bg); }
 
 .list-header {
   display: flex;
