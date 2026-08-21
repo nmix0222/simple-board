@@ -4,13 +4,17 @@ import {
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
+import { useAuth } from '../AuthContext.jsx';
+import { sha256Hex, generatePasskey } from '../hash.js';
 import AdSlot from '../components/AdSlot.jsx';
 import PostCard from '../components/PostCard.jsx';
+import RollingPaperCard from '../components/RollingPaperCard.jsx';
 
-const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문'];
+const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문', '롤링페이퍼'];
 const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
 
 export default function Board() {
+  const { uid } = useAuth();
   const [posts, setPosts] = useState([]);
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [currentTab, setCurrentTab] = useState('전체');
@@ -19,6 +23,9 @@ export default function Board() {
   const [content, setContent] = useState('');
   const [color, setColor] = useState(POST_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
+  const [newPasskey, setNewPasskey] = useState(null);
+
+  const isRollingPaper = category === '롤링페이퍼';
 
   useEffect(() => {
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
@@ -32,22 +39,44 @@ export default function Board() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) {
-      alert('제목과 내용을 입력해주세요.');
+    if (!uid) return;
+    if (!title.trim()) {
+      alert('제목을 입력해주세요.');
       return;
     }
+    if (!isRollingPaper && !content.trim()) {
+      alert('내용을 입력해주세요.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await addDoc(collection(db, 'posts'), {
-        category,
-        author: author.trim(),
-        title: title.trim(),
-        content: content.trim(),
-        color,
-        reactions: {},
-        commentCount: 0,
-        createdAt: serverTimestamp()
-      });
+      if (isRollingPaper) {
+        const passkey = generatePasskey();
+        const passkeyHash = await sha256Hex(passkey);
+        await addDoc(collection(db, 'posts'), {
+          category,
+          author: author.trim(),
+          authorUid: uid,
+          title: title.trim(),
+          content: '',
+          passkeyHash,
+          createdAt: serverTimestamp()
+        });
+        setNewPasskey(passkey);
+      } else {
+        await addDoc(collection(db, 'posts'), {
+          category,
+          author: author.trim(),
+          authorUid: uid,
+          title: title.trim(),
+          content: content.trim(),
+          color,
+          reactions: {},
+          commentCount: 0,
+          createdAt: serverTimestamp()
+        });
+      }
       setTitle('');
       setContent('');
       setColor(POST_COLORS[0]);
@@ -85,34 +114,54 @@ export default function Board() {
           <div className="row">
             <input
               type="text"
-              placeholder="제목"
+              placeholder={isRollingPaper ? '롤링페이퍼 제목 (예: OOO를 위한 롤링페이퍼)' : '제목'}
               value={title}
               onChange={e => setTitle(e.target.value)}
             />
           </div>
-          <div className="row">
-            <textarea
-              placeholder="내용을 입력하세요"
-              value={content}
-              onChange={e => setContent(e.target.value)}
-            />
-          </div>
-          <div className="row color-picker">
-            {POST_COLORS.map(c => (
-              <button
-                key={c}
-                type="button"
-                className={`color-swatch${c === color ? ' selected' : ''}`}
-                style={{ background: c }}
-                title="글 색상"
-                onClick={() => setColor(c)}
-              />
-            ))}
-          </div>
+          {!isRollingPaper && (
+            <>
+              <div className="row">
+                <textarea
+                  placeholder="내용을 입력하세요"
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                />
+              </div>
+              <div className="row color-picker">
+                {POST_COLORS.map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`color-swatch${c === color ? ' selected' : ''}`}
+                    style={{ background: c }}
+                    title="글 색상"
+                    onClick={() => setColor(c)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {isRollingPaper && (
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
+              등록하면 6자리 패스키가 발급됩니다. 이 패스키를 아는 사람만 롤링페이퍼에 들어와 메시지를 남길 수 있어요.
+            </p>
+          )}
           <div className="actions">
-            <button className="btn-primary" type="submit" disabled={submitting}>등록</button>
+            <button className="btn-primary" type="submit" disabled={submitting || !uid}>등록</button>
           </div>
         </form>
+
+        {newPasskey && (
+          <div className="passkey-display">
+            <div>생성된 패스키</div>
+            <div className="passkey-code">{newPasskey}</div>
+            <div className="passkey-hint">이 패스키가 있어야만 들어올 수 있어요. 꼭 저장/공유해두세요.</div>
+            <div className="actions" style={{ justifyContent: 'center', marginTop: 10 }}>
+              <button className="btn-secondary" type="button" onClick={() => setNewPasskey(null)}>확인</button>
+            </div>
+          </div>
+        )}
       </section>
 
       <AdSlot />
@@ -138,9 +187,13 @@ export default function Board() {
         {filtered.length === 0 ? (
           <div className="empty">아직 등록된 글이 없습니다.</div>
         ) : (
-          filtered.map(post => (
-            <PostCard key={post.id} post={post} onDelete={handleDelete} onReact={handleReact} />
-          ))
+          filtered.map(post =>
+            post.category === '롤링페이퍼' ? (
+              <RollingPaperCard key={post.id} post={post} onDelete={handleDelete} />
+            ) : (
+              <PostCard key={post.id} post={post} onDelete={handleDelete} onReact={handleReact} />
+            )
+          )
         )}
       </section>
     </>
