@@ -254,6 +254,23 @@
     font-size: 14px;
     padding: 10px 0;
   }
+  .color-picker {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .color-swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    padding: 0;
+    cursor: pointer;
+  }
+  .color-swatch.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+  }
 </style>
 </head>
 <body>
@@ -287,45 +304,62 @@
   <section id="postList"></section>
 </main>
 
-<script>
-  const STORAGE_KEY = 'simple-board-posts';
-  const USERS_KEY = 'simple-board-users';
-  const SESSION_KEY = 'simple-board-current-user';
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updateProfile
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+  import {
+    getFirestore,
+    collection,
+    addDoc,
+    deleteDoc,
+    doc,
+    onSnapshot,
+    query,
+    orderBy,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyC56fDWIpbORE_RyCrCS6zxzzfLddC9Njc",
+    authDomain: "simple-board-8b064.firebaseapp.com",
+    projectId: "simple-board-8b064",
+    storageBucket: "simple-board-8b064.firebasestorage.app",
+    messagingSenderId: "199343169394",
+    appId: "1:199343169394:web:d89f8f684155058165c7eb",
+    measurementId: "G-GKMDX9NN0W"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const auth = getAuth(firebaseApp);
+  const db = getFirestore(firebaseApp);
+
   const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문'];
+  const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
   let currentCategory = '전체';
   let authTab = 'login';
+  let currentUser = null; // { uid, username }
+  let allPosts = [];
+  let selectedColor = POST_COLORS[0];
 
-  async function hashPassword(password) {
-    const data = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  function loadUsers() {
-    try {
-      const raw = localStorage.getItem(USERS_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function saveUsers(users) {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  // Firebase email/password auth needs an email; users only pick a "username",
+  // so map it to a deterministic fake address instead of exposing an email field.
+  function usernameToEmail(username) {
+    const encoded = btoa(unescape(encodeURIComponent(username)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    return `${encoded}@simple-board.local`;
   }
 
   function getCurrentUser() {
-    return localStorage.getItem(SESSION_KEY);
-  }
-
-  function setCurrentUser(username) {
-    if (username) {
-      localStorage.setItem(SESSION_KEY, username);
-    } else {
-      localStorage.removeItem(SESSION_KEY);
-    }
+    return currentUser ? currentUser.username : null;
   }
 
   function renderAuth() {
@@ -364,7 +398,7 @@
             <div class="row">
               <input type="password" id="signupPassword" placeholder="비밀번호 (4자 이상)">
             </div>
-            <div class="auth-hint">※ 이 계정은 이 브라우저에만 저장됩니다. 연습/개인용으로만 사용하세요.</div>
+            <div class="auth-hint">※ 계정은 Firebase에 저장되며, 다른 브라우저/기기에서도 로그인할 수 있습니다.</div>
             <div class="actions">
               <button class="btn-primary" onclick="doSignup()">가입하기</button>
             </div>
@@ -397,11 +431,13 @@
         <div class="row">
           <textarea id="contentInput" placeholder="내용을 입력하세요"></textarea>
         </div>
+        <div class="row color-picker" id="colorPicker"></div>
         <div class="actions">
           <button class="btn-primary" onclick="addPost()">등록</button>
         </div>
       `;
       initCategorySelect();
+      renderColorPicker();
     } else {
       writeBox.innerHTML = `
         <h2>글쓰기</h2>
@@ -425,18 +461,19 @@
       return;
     }
 
-    const users = loadUsers();
-    if (users.some(u => u.username === username)) {
-      alert('이미 존재하는 아이디입니다.');
-      return;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, usernameToEmail(username), password);
+      await updateProfile(cred.user, { displayName: username });
+      currentUser = { uid: cred.user.uid, username };
+      renderAuth();
+      render();
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        alert('이미 존재하는 아이디입니다.');
+      } else {
+        alert('회원가입에 실패했습니다: ' + e.message);
+      }
     }
-
-    const passwordHash = await hashPassword(password);
-    users.push({ username, passwordHash });
-    saveUsers(users);
-    setCurrentUser(username);
-    renderAuth();
-    render();
   }
 
   async function doLogin() {
@@ -445,26 +482,23 @@
     const username = usernameInput.value.trim();
     const password = passwordInput.value;
 
-    const users = loadUsers();
-    const user = users.find(u => u.username === username);
-    if (!user) {
-      alert('존재하지 않는 아이디입니다.');
-      return;
+    try {
+      const cred = await signInWithEmailAndPassword(auth, usernameToEmail(username), password);
+      currentUser = { uid: cred.user.uid, username: cred.user.displayName || username };
+      renderAuth();
+      render();
+    } catch (e) {
+      if (['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password'].includes(e.code)) {
+        alert('아이디 또는 비밀번호가 일치하지 않습니다.');
+      } else {
+        alert('로그인에 실패했습니다: ' + e.message);
+      }
     }
-
-    const passwordHash = await hashPassword(password);
-    if (passwordHash !== user.passwordHash) {
-      alert('비밀번호가 일치하지 않습니다.');
-      return;
-    }
-
-    setCurrentUser(username);
-    renderAuth();
-    render();
   }
 
-  function doLogout() {
-    setCurrentUser(null);
+  async function doLogout() {
+    await signOut(auth);
+    currentUser = null;
     renderAuth();
     render();
   }
@@ -472,6 +506,21 @@
   function initCategorySelect() {
     const select = document.getElementById('categoryInput');
     select.innerHTML = CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+
+  function renderColorPicker() {
+    const picker = document.getElementById('colorPicker');
+    if (!picker) return;
+    picker.innerHTML = POST_COLORS
+      .map(c => `<button type="button" class="color-swatch${c === selectedColor ? ' selected' : ''}" data-color="${c}" style="background:${c}" title="글 색상"></button>`)
+      .join('');
+    picker.querySelectorAll('.color-swatch').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedColor = btn.dataset.color;
+        picker.querySelectorAll('.color-swatch').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
   }
 
   function initTabs() {
@@ -489,19 +538,6 @@
     });
   }
 
-  function loadPosts() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function savePosts(posts) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-  }
-
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
@@ -509,16 +545,16 @@
   }
 
   function formatDate(ts) {
-    const d = new Date(ts);
+    if (!ts) return '방금 전';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
     const pad = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function render() {
-    const posts = loadPosts();
     const filtered = currentCategory === '전체'
-      ? posts
-      : posts.filter(p => p.category === currentCategory);
+      ? allPosts
+      : allPosts.filter(p => p.category === currentCategory);
     const list = document.getElementById('postList');
     const countLabel = document.getElementById('countLabel');
     countLabel.textContent = `${filtered.length}개의 글`;
@@ -529,26 +565,23 @@
     }
 
     list.innerHTML = filtered
-      .slice()
-      .sort((a, b) => b.id - a.id)
       .map(post => `
-        <article class="post">
+        <article class="post" style="${post.color && post.color !== '#ffffff' ? `background:${post.color}` : ''}">
           <div class="post-top">
             <div class="post-title"><span class="post-category">${escapeHtml(post.category || '자유')}</span>${escapeHtml(post.title)}</div>
-            <div class="post-meta">${formatDate(post.id)}</div>
+            <div class="post-meta">${formatDate(post.createdAt)}</div>
           </div>
           <div class="post-body">${escapeHtml(post.content)}</div>
           <div class="post-footer">
             <span class="post-author">${escapeHtml(post.author || '익명')}</span>
-            ${post.author === getCurrentUser() ? `<button class="btn-delete" onclick="deletePost(${post.id})">삭제</button>` : ''}
+            ${currentUser && post.authorUid === currentUser.uid ? `<button class="btn-delete" onclick="deletePost('${post.id}')">삭제</button>` : ''}
           </div>
         </article>
       `)
       .join('');
   }
 
-  function addPost() {
-    const currentUser = getCurrentUser();
+  async function addPost() {
     if (!currentUser) {
       alert('로그인 후 이용해주세요.');
       return;
@@ -567,36 +600,63 @@
       return;
     }
 
-    const posts = loadPosts();
-    posts.push({
-      id: Date.now(),
-      category,
-      author: currentUser,
-      title,
-      content
-    });
-    savePosts(posts);
-
-    titleInput.value = '';
-    contentInput.value = '';
-    render();
+    try {
+      await addDoc(collection(db, 'posts'), {
+        category,
+        author: currentUser.username,
+        authorUid: currentUser.uid,
+        title,
+        content,
+        color: selectedColor,
+        createdAt: serverTimestamp()
+      });
+      titleInput.value = '';
+      contentInput.value = '';
+      selectedColor = POST_COLORS[0];
+      renderColorPicker();
+    } catch (e) {
+      alert('글 등록에 실패했습니다: ' + e.message);
+    }
   }
 
-  function deletePost(id) {
-    const posts = loadPosts();
-    const post = posts.find(p => p.id === id);
-    if (!post || post.author !== getCurrentUser()) {
+  async function deletePost(id) {
+    const post = allPosts.find(p => p.id === id);
+    if (!post || !currentUser || post.authorUid !== currentUser.uid) {
       alert('본인 글만 삭제할 수 있습니다.');
       return;
     }
     if (!confirm('이 글을 삭제하시겠습니까?')) return;
-    savePosts(posts.filter(p => p.id !== id));
-    render();
+    try {
+      await deleteDoc(doc(db, 'posts', id));
+    } catch (e) {
+      alert('삭제에 실패했습니다: ' + e.message);
+    }
   }
 
-  renderAuth();
+  window.addPost = addPost;
+  window.deletePost = deletePost;
+  window.doLogin = doLogin;
+  window.doSignup = doSignup;
+  window.doLogout = doLogout;
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user ? { uid: user.uid, username: user.displayName || '사용자' } : null;
+    renderAuth();
+    render();
+  });
+
+  onSnapshot(
+    query(collection(db, 'posts'), orderBy('createdAt', 'desc')),
+    (snapshot) => {
+      allPosts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      render();
+    },
+    (error) => {
+      console.error('Firestore error:', error);
+    }
+  );
+
   initTabs();
-  render();
 </script>
 </body>
 </html>
