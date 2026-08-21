@@ -149,6 +149,51 @@
     padding: 40px 0;
     font-size: 14px;
   }
+  select {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: var(--text);
+    max-width: 140px;
+  }
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .tab {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tab:hover {
+    border-color: var(--accent);
+  }
+  .tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .post-category {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: #eaf0ff;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
 </style>
 </head>
 <body>
@@ -159,7 +204,10 @@
   <section class="write-box">
     <h2>글쓰기</h2>
     <div class="row">
+      <select id="categoryInput"></select>
       <input type="text" id="authorInput" placeholder="이름" style="max-width:150px;">
+    </div>
+    <div class="row">
       <input type="text" id="titleInput" placeholder="제목">
     </div>
     <div class="row">
@@ -170,6 +218,8 @@
     </div>
   </section>
 
+  <div class="tabs" id="tabList"></div>
+
   <div class="list-header">
     <span id="countLabel">0개의 글</span>
   </div>
@@ -178,6 +228,28 @@
 
 <script>
   const STORAGE_KEY = 'simple-board-posts';
+  const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문'];
+  let currentCategory = '전체';
+
+  function initCategorySelect() {
+    const select = document.getElementById('categoryInput');
+    select.innerHTML = CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+
+  function initTabs() {
+    const tabList = document.getElementById('tabList');
+    const all = ['전체', ...CATEGORIES];
+    tabList.innerHTML = all
+      .map(c => `<button type="button" class="tab${c === currentCategory ? ' active' : ''}" data-category="${escapeHtml(c)}">${escapeHtml(c)}</button>`)
+      .join('');
+    tabList.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentCategory = btn.dataset.category;
+        initTabs();
+        render();
+      });
+    });
+  }
 
   function loadPosts() {
     try {
@@ -206,22 +278,25 @@
 
   function render() {
     const posts = loadPosts();
+    const filtered = currentCategory === '전체'
+      ? posts
+      : posts.filter(p => p.category === currentCategory);
     const list = document.getElementById('postList');
     const countLabel = document.getElementById('countLabel');
-    countLabel.textContent = `${posts.length}개의 글`;
+    countLabel.textContent = `${filtered.length}개의 글`;
 
-    if (posts.length === 0) {
+    if (filtered.length === 0) {
       list.innerHTML = '<div class="empty">아직 등록된 글이 없습니다.</div>';
       return;
     }
 
-    list.innerHTML = posts
+    list.innerHTML = filtered
       .slice()
       .sort((a, b) => b.id - a.id)
       .map(post => `
         <article class="post">
           <div class="post-top">
-            <div class="post-title">${escapeHtml(post.title)}</div>
+            <div class="post-title"><span class="post-category">${escapeHtml(post.category || '자유')}</span>${escapeHtml(post.title)}</div>
             <div class="post-meta">${formatDate(post.id)}</div>
           </div>
           <div class="post-body">${escapeHtml(post.content)}</div>
@@ -235,10 +310,12 @@
   }
 
   function addPost() {
+    const categoryInput = document.getElementById('categoryInput');
     const authorInput = document.getElementById('authorInput');
     const titleInput = document.getElementById('titleInput');
     const contentInput = document.getElementById('contentInput');
 
+    const category = categoryInput.value;
     const title = titleInput.value.trim();
     const content = contentInput.value.trim();
     const author = authorInput.value.trim();
@@ -251,6 +328,7 @@
     const posts = loadPosts();
     posts.push({
       id: Date.now(),
+      category,
       author,
       title,
       content
@@ -269,6 +347,8 @@
     render();
   }
 
+  initCategorySelect();
+  initTabs();
   render();
 </script>
 </body>
