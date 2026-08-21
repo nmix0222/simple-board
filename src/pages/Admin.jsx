@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext.jsx';
 
 export default function Admin() {
   const { isAdmin, loginAdmin, logoutAdmin } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [posts, setPosts] = useState([]);
@@ -23,7 +23,7 @@ export default function Admin() {
     e.preventDefault();
     setError('');
     try {
-      await loginAdmin(email.trim(), password);
+      await loginAdmin(username.trim(), password);
     } catch (e2) {
       setError('로그인 정보가 올바르지 않습니다.');
     }
@@ -40,7 +40,7 @@ export default function Admin() {
         <h2>관리자 로그인</h2>
         <form onSubmit={handleLogin}>
           <div className="row">
-            <input type="email" placeholder="관리자 이메일" value={email} onChange={e => setEmail(e.target.value)} />
+            <input type="text" placeholder="관리자 아이디" value={username} onChange={e => setUsername(e.target.value)} />
           </div>
           <div className="row">
             <input type="password" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} />

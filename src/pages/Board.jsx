@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  collection, addDoc, deleteDoc, doc, updateDoc, increment,
+  collection, addDoc, doc, updateDoc, increment,
   query, orderBy, onSnapshot, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
-import { useAuth } from '../AuthContext.jsx';
 import { sha256Hex, generatePasskey } from '../hash.js';
 import AdSlot from '../components/AdSlot.jsx';
 import PostCard from '../components/PostCard.jsx';
@@ -14,11 +13,11 @@ const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게
 const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
 
 export default function Board() {
-  const { uid } = useAuth();
   const [posts, setPosts] = useState([]);
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [currentTab, setCurrentTab] = useState('전체');
   const [author, setAuthor] = useState('');
+  const [password, setPassword] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [color, setColor] = useState(POST_COLORS[0]);
@@ -30,7 +29,7 @@ export default function Board() {
   useEffect(() => {
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, snapshot => {
-      setPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => !p.deleted));
     });
     return unsub;
   }, []);
@@ -39,7 +38,6 @@ export default function Board() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!uid) return;
     if (!title.trim()) {
       alert('제목을 입력해주세요.');
       return;
@@ -48,16 +46,21 @@ export default function Board() {
       alert('내용을 입력해주세요.');
       return;
     }
+    if (password.trim().length < 4) {
+      alert('수정/삭제를 위한 비밀번호를 4자리 이상 입력해주세요.');
+      return;
+    }
 
     setSubmitting(true);
     try {
+      const passwordHash = await sha256Hex(password.trim());
       if (isRollingPaper) {
         const passkey = generatePasskey();
         const passkeyHash = await sha256Hex(passkey);
         await addDoc(collection(db, 'posts'), {
           category,
           author: author.trim(),
-          authorUid: uid,
+          passwordHash,
           title: title.trim(),
           content: '',
           passkeyHash,
@@ -68,7 +71,7 @@ export default function Board() {
         await addDoc(collection(db, 'posts'), {
           category,
           author: author.trim(),
-          authorUid: uid,
+          passwordHash,
           title: title.trim(),
           content: content.trim(),
           color,
@@ -79,15 +82,11 @@ export default function Board() {
       }
       setTitle('');
       setContent('');
+      setPassword('');
       setColor(POST_COLORS[0]);
     } finally {
       setSubmitting(false);
     }
-  }
-
-  async function handleDelete(id) {
-    if (!confirm('이 글을 삭제하시겠습니까?')) return;
-    await deleteDoc(doc(db, 'posts', id));
   }
 
   async function handleReact(id, emoji) {
@@ -142,13 +141,21 @@ export default function Board() {
               </div>
             </>
           )}
+          <div className="row">
+            <input
+              type="password"
+              placeholder="비밀번호 (수정/삭제 시 필요, 4자리 이상)"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
+          </div>
           {isRollingPaper && (
             <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
               등록하면 6자리 패스키가 발급됩니다. 이 패스키를 아는 사람만 롤링페이퍼에 들어와 메시지를 남길 수 있어요.
             </p>
           )}
           <div className="actions">
-            <button className="btn-primary" type="submit" disabled={submitting || !uid}>등록</button>
+            <button className="btn-primary" type="submit" disabled={submitting}>등록</button>
           </div>
         </form>
 
@@ -189,9 +196,9 @@ export default function Board() {
         ) : (
           filtered.map(post =>
             post.category === '롤링페이퍼' ? (
-              <RollingPaperCard key={post.id} post={post} onDelete={handleDelete} />
+              <RollingPaperCard key={post.id} post={post} />
             ) : (
-              <PostCard key={post.id} post={post} onDelete={handleDelete} onReact={handleReact} />
+              <PostCard key={post.id} post={post} onReact={handleReact} />
             )
           )
         )}

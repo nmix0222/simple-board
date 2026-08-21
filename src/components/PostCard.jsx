@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collection, addDoc, doc, updateDoc, increment, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, increment, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
+import { sha256Hex } from '../hash.js';
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '👏'];
 const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문'];
@@ -14,11 +15,11 @@ function formatDate(ts) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function PostCard({ post, onDelete, onReact }) {
-  const { uid, isAdmin } = useAuth();
-  const canModify = !!uid && (post.authorUid === uid || isAdmin);
+export default function PostCard({ post, onReact }) {
+  const { isAdmin } = useAuth();
 
   const [editing, setEditing] = useState(false);
+  const [editPassword, setEditPassword] = useState('');
   const [editTitle, setEditTitle] = useState(post.title);
   const [editContent, setEditContent] = useState(post.content);
   const [editCategory, setEditCategory] = useState(post.category);
@@ -46,12 +47,20 @@ export default function PostCard({ post, onDelete, onReact }) {
     }
     await addDoc(collection(db, 'posts', post.id, 'comments'), {
       author: commentAuthor.trim(),
-      authorUid: uid,
       content: commentText.trim(),
       createdAt: serverTimestamp()
     });
     await updateDoc(doc(db, 'posts', post.id), { commentCount: increment(1) });
     setCommentText('');
+  }
+
+  function startEdit() {
+    setEditTitle(post.title);
+    setEditContent(post.content);
+    setEditCategory(post.category);
+    setEditColor(post.color || POST_COLORS[0]);
+    setEditPassword('');
+    setEditing(true);
   }
 
   async function saveEdit(e) {
@@ -60,13 +69,44 @@ export default function PostCard({ post, onDelete, onReact }) {
       alert('제목과 내용을 입력해주세요.');
       return;
     }
-    await updateDoc(doc(db, 'posts', post.id), {
+    const payload = {
       title: editTitle.trim(),
       content: editContent.trim(),
       category: editCategory,
       color: editColor
-    });
-    setEditing(false);
+    };
+    try {
+      if (isAdmin) {
+        await updateDoc(doc(db, 'posts', post.id), payload);
+      } else {
+        const proof = await sha256Hex(editPassword.trim());
+        await updateDoc(doc(db, 'posts', post.id), { ...payload, proof });
+      }
+      setEditing(false);
+    } catch (err) {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm('이 글을 삭제하시겠습니까?')) return;
+    if (isAdmin) {
+      await deleteDoc(doc(db, 'posts', post.id));
+      return;
+    }
+    const pw = window.prompt('비밀번호를 입력하세요');
+    if (pw === null) return;
+    try {
+      const proof = await sha256Hex(pw.trim());
+      await updateDoc(doc(db, 'posts', post.id), {
+        deleted: true,
+        title: '(삭제된 게시물)',
+        content: '',
+        proof
+      });
+    } catch (err) {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
   }
 
   const reactions = post.reactions || {};
@@ -97,6 +137,16 @@ export default function PostCard({ post, onDelete, onReact }) {
               />
             ))}
           </div>
+          {!isAdmin && (
+            <div className="row">
+              <input
+                type="password"
+                placeholder="비밀번호"
+                value={editPassword}
+                onChange={e => setEditPassword(e.target.value)}
+              />
+            </div>
+          )}
           <div className="actions" style={{ gap: 8 }}>
             <button type="button" className="btn-secondary" onClick={() => setEditing(false)}>취소</button>
             <button type="submit" className="btn-primary">저장</button>
@@ -121,12 +171,10 @@ export default function PostCard({ post, onDelete, onReact }) {
       <div className="post-body">{post.content}</div>
       <div className="post-footer">
         <span className="post-author">{post.author || '익명'}</span>
-        {canModify && (
-          <span>
-            <button type="button" className="btn-delete" onClick={() => setEditing(true)} style={{ color: 'var(--accent)' }}>수정</button>
-            <button type="button" className="btn-delete" onClick={() => onDelete(post.id)}>삭제</button>
-          </span>
-        )}
+        <span>
+          <button type="button" className="btn-delete" onClick={startEdit} style={{ color: 'var(--accent)' }}>수정</button>
+          <button type="button" className="btn-delete" onClick={handleDelete}>삭제</button>
+        </span>
       </div>
       <div className="reaction-bar">
         {EMOJIS.map(e => (

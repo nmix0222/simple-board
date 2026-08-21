@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, addDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { useAuth } from '../AuthContext.jsx';
 import { sha256Hex } from '../hash.js';
@@ -13,9 +13,8 @@ function formatDate(ts) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function RollingPaperCard({ post, onDelete }) {
-  const { uid, isAdmin } = useAuth();
-  const canModify = !!uid && (post.authorUid === uid || isAdmin);
+export default function RollingPaperCard({ post }) {
+  const { isAdmin } = useAuth();
 
   const [passkeyInput, setPasskeyInput] = useState('');
   const [verifiedHash, setVerifiedHash] = useState(null);
@@ -60,6 +59,26 @@ export default function RollingPaperCard({ post, onDelete }) {
     setMsgContent('');
   }
 
+  async function handleDelete() {
+    if (!confirm('이 롤링페이퍼를 삭제하시겠습니까?')) return;
+    if (isAdmin) {
+      await deleteDoc(doc(db, 'posts', post.id));
+      return;
+    }
+    const pw = window.prompt('작성 시 입력한 비밀번호를 입력하세요');
+    if (pw === null) return;
+    try {
+      const proof = await sha256Hex(pw.trim());
+      await updateDoc(doc(db, 'posts', post.id), {
+        deleted: true,
+        title: '(삭제된 롤링페이퍼)',
+        proof
+      });
+    } catch (err) {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
+  }
+
   return (
     <article className="post">
       <div className="post-top">
@@ -71,9 +90,7 @@ export default function RollingPaperCard({ post, onDelete }) {
       </div>
       <div className="post-footer">
         <span className="post-author">{post.author || '익명'}</span>
-        {canModify && (
-          <button type="button" className="btn-delete" onClick={() => onDelete(post.id)}>삭제</button>
-        )}
+        <button type="button" className="btn-delete" onClick={handleDelete}>삭제</button>
       </div>
 
       {!verifiedHash ? (
