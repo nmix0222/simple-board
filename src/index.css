@@ -358,7 +358,7 @@ button {
 .reaction-btn:hover { border-color: var(--accent); }
 .comment-toggle { background: transparent; color: var(--accent); padding: 4px 0; font-size: 12px; font-weight: 600; }
 .comment-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.comment-item { font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.comment-item { font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--border); overflow-wrap: anywhere; }
 .comment-item:last-child { border-bottom: none; }
 .comment-author { font-weight: 700; margin-right: 6px; }
 .comment-form { display: flex; gap: 6px; margin-top: 8px; }
