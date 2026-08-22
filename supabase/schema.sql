@@ -9,6 +9,8 @@
 drop view if exists rolling_paper_message_comments_public cascade;
 drop view if exists rolling_paper_messages_public cascade;
 drop view if exists rolling_papers_public cascade;
+drop table if exists notifications cascade;
+drop table if exists comment_likes cascade;
 drop table if exists banned_words cascade;
 drop table if exists admin_activity_logs cascade;
 drop table if exists user_restrictions cascade;
@@ -43,6 +45,10 @@ drop function if exists enforce_comment_content_rules() cascade;
 drop function if exists log_admin_action(text, text, uuid, jsonb) cascade;
 drop function if exists restrict_user(uuid, text, text, timestamptz) cascade;
 drop function if exists unrestrict_user(uuid) cascade;
+drop function if exists notify_on_comment() cascade;
+drop function if exists notify_on_rolling_paper_message() cascade;
+drop function if exists notify_on_message_comment() cascade;
+drop function if exists bump_comment_like_count() cascade;
 drop trigger if exists on_auth_user_created on auth.users;
 
 -- Supabase는 보통 pgcrypto를 extensions 스키마에 설치한다. 아래 함수들의
@@ -100,6 +106,27 @@ create trigger profiles_protect_role
 alter table profiles enable row level security;
 create policy profiles_select_all on profiles for select using (true);
 create policy profiles_update_own on profiles for update using (auth.uid() = id or is_admin());
+
+-- ------------------------------------------------------------
+-- 1b. notifications (내 글에 댓글, 내 댓글에 답글, 내 롤링페이퍼에 메시지/답장이 오면 알림)
+-- 실제 삽입은 각 트리거 함수(뒤에서 정의)를 통해서만 이뤄지고, 클라이언트가 직접 insert할 수 없다.
+-- ------------------------------------------------------------
+create table notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  actor_id uuid references profiles(id) on delete set null,
+  type text not null check (type in ('post_comment', 'comment_reply', 'rolling_paper_message', 'rolling_paper_message_reply')),
+  target_type text not null check (target_type in ('post', 'rolling_paper')),
+  target_id uuid not null,
+  preview text,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index notifications_user_idx on notifications(user_id, created_at desc);
+
+alter table notifications enable row level security;
+create policy notifications_select_own on notifications for select using (user_id = auth.uid());
+create policy notifications_update_own on notifications for update using (user_id = auth.uid());
 
 -- ------------------------------------------------------------
 -- 2. categories (관리자가 추가/수정/삭제)
@@ -255,6 +282,7 @@ create table comments (
   author_id uuid not null references profiles(id) on delete cascade,
   content text not null,
   is_deleted boolean not null default false,
+  like_count integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -338,6 +366,67 @@ $$;
 create trigger comments_enforce_rules
   before insert or update of content on comments
   for each row execute function enforce_comment_content_rules();
+
+-- 댓글이 달리면 글쓴이에게, 답글이 달리면 원댓글 작성자에게 알림 (notifications 테이블은 뒤에서 정의)
+create function notify_on_comment() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_post posts%rowtype;
+  v_parent comments%rowtype;
+begin
+  select * into v_post from posts where id = new.post_id;
+
+  if new.parent_id is not null then
+    select * into v_parent from comments where id = new.parent_id;
+    if v_parent.author_id is not null and v_parent.author_id <> new.author_id then
+      insert into notifications (user_id, actor_id, type, target_type, target_id, preview)
+      values (v_parent.author_id, new.author_id, 'comment_reply', 'post', new.post_id, left(new.content, 80));
+    end if;
+  end if;
+
+  if v_post.author_id is not null and v_post.author_id <> new.author_id
+     and (new.parent_id is null or v_post.author_id <> v_parent.author_id) then
+    insert into notifications (user_id, actor_id, type, target_type, target_id, preview)
+    values (v_post.author_id, new.author_id, 'post_comment', 'post', new.post_id, left(new.content, 80));
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger comments_notify_after_insert
+  after insert on comments
+  for each row execute function notify_on_comment();
+
+-- ------------------------------------------------------------
+-- 4b. comment_likes (일반 게시판 댓글 좋아요)
+-- ------------------------------------------------------------
+create table comment_likes (
+  comment_id uuid not null references comments(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (comment_id, user_id)
+);
+alter table comment_likes enable row level security;
+create policy comment_likes_select_all on comment_likes for select using (true);
+create policy comment_likes_insert_own on comment_likes for insert with check (auth.uid() = user_id);
+create policy comment_likes_delete_own on comment_likes for delete using (auth.uid() = user_id);
+
+create function bump_comment_like_count() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if tg_op = 'INSERT' then
+    update comments set like_count = like_count + 1 where id = new.comment_id;
+  elsif tg_op = 'DELETE' then
+    update comments set like_count = greatest(like_count - 1, 0) where id = old.comment_id;
+  end if;
+  return null;
+end;
+$$;
+
+create trigger comment_likes_after_change
+  after insert or delete on comment_likes
+  for each row execute function bump_comment_like_count();
 
 -- ------------------------------------------------------------
 -- 5. post_likes (추천/비추천 — value: 1=추천, -1=비추천)
@@ -525,6 +614,25 @@ create trigger rolling_paper_messages_after_change
   after insert or delete on rolling_paper_messages
   for each row execute function bump_rolling_paper_message_count();
 
+-- 롤링페이퍼에 메시지가 달리면 만든 사람에게 알림
+create function notify_on_rolling_paper_message() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_paper rolling_papers%rowtype;
+begin
+  select * into v_paper from rolling_papers where id = new.rolling_paper_id;
+  if v_paper.creator_id is not null and v_paper.creator_id <> new.author_id then
+    insert into notifications (user_id, actor_id, type, target_type, target_id, preview)
+    values (v_paper.creator_id, new.author_id, 'rolling_paper_message', 'rolling_paper', new.rolling_paper_id, left(new.content, 80));
+  end if;
+  return new;
+end;
+$$;
+
+create trigger rolling_paper_messages_notify_after_insert
+  after insert on rolling_paper_messages
+  for each row execute function notify_on_rolling_paper_message();
+
 create view rolling_paper_messages_public as
   select m.id, m.rolling_paper_id,
          case when m.is_anonymous then null else m.author_id end as author_id,
@@ -611,6 +719,25 @@ alter table rolling_paper_message_comments enable row level security;
 create policy rpmc_select_own_or_admin on rolling_paper_message_comments for select using (author_id = auth.uid() or is_admin());
 create policy rpmc_insert_own on rolling_paper_message_comments for insert with check (auth.uid() is not null and author_id = auth.uid());
 create policy rpmc_delete_own_or_admin on rolling_paper_message_comments for delete using (author_id = auth.uid() or is_admin());
+
+-- 내 롤링페이퍼 메시지에 답장이 달리면 알림
+create function notify_on_message_comment() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_message rolling_paper_messages%rowtype;
+begin
+  select * into v_message from rolling_paper_messages where id = new.message_id;
+  if v_message.author_id is not null and v_message.author_id <> new.author_id then
+    insert into notifications (user_id, actor_id, type, target_type, target_id, preview)
+    values (v_message.author_id, new.author_id, 'rolling_paper_message_reply', 'rolling_paper', v_message.rolling_paper_id, left(new.content, 80));
+  end if;
+  return new;
+end;
+$$;
+
+create trigger message_comments_notify_after_insert
+  after insert on rolling_paper_message_comments
+  for each row execute function notify_on_message_comment();
 
 create view rolling_paper_message_comments_public as
   select c.id, c.message_id,

@@ -23,6 +23,7 @@ export default function Board() {
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState('latest');
   const [visibleCount, setVisibleCount] = useState(20);
+  const [authorNames, setAuthorNames] = useState({});
 
   const [showWriteForm, setShowWriteForm] = useState(false);
   const [categoryId, setCategoryId] = useState('');
@@ -122,14 +123,23 @@ export default function Board() {
       ? query.order('is_pinned', { ascending: false }).order('like_count', { ascending: false })
       : query.order('is_pinned', { ascending: false }).order('created_at', { ascending: false });
     const { data, error } = await query.limit(200);
-    if (!error) setPosts(data || []);
+    if (!error) {
+      setPosts(data || []);
+      const authorIds = [...new Set((data || []).map(p => p.author_id))];
+      if (authorIds.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', authorIds);
+        setAuthorNames(Object.fromEntries((profs || []).map(pr => [pr.id, pr.nickname])));
+      }
+    }
     setLoading(false);
   }
 
   const filtered = posts.filter(p => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q);
+    return p.title.toLowerCase().includes(q)
+      || p.content.toLowerCase().includes(q)
+      || (authorNames[p.author_id] || '').toLowerCase().includes(q);
   });
   const visiblePosts = filtered.slice(0, visibleCount);
   const filteredPapers = papers.filter(p => {
@@ -348,7 +358,7 @@ export default function Board() {
       </div>
 
       <div className="row">
-        <input type="text" aria-label="게시글 검색" placeholder="제목, 내용 검색" value={search} onChange={e => setSearch(e.target.value)} />
+        <input type="text" aria-label="게시글 검색" placeholder="제목, 내용, 작성자 검색" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {currentTab !== '롤링페이퍼' && (

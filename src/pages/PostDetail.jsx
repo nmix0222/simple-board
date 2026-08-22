@@ -71,7 +71,22 @@ export default function PostDetail() {
       const authorIds = [...new Set(cmts.map(c => c.author_id))];
       const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', authorIds);
       const nameMap = Object.fromEntries((profs || []).map(pr => [pr.id, pr.nickname]));
-      setComments(cmts.map(c => ({ ...c, authorName: nameMap[c.author_id] || '알 수 없음' })));
+
+      let likedByMe = new Set();
+      if (user) {
+        const { data: likes } = await supabase
+          .from('comment_likes')
+          .select('comment_id')
+          .eq('user_id', user.id)
+          .in('comment_id', cmts.map(c => c.id));
+        likedByMe = new Set((likes || []).map(l => l.comment_id));
+      }
+
+      setComments(cmts.map(c => ({
+        ...c,
+        authorName: nameMap[c.author_id] || '알 수 없음',
+        likedByMe: likedByMe.has(c.id)
+      })));
     } else {
       setComments([]);
     }
@@ -189,6 +204,18 @@ export default function PostDetail() {
     load();
   }
 
+  async function toggleCommentLike(commentId, currentlyLiked) {
+    if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (currentlyLiked) {
+      await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id);
+    } else {
+      await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
+    }
+    setComments(comments.map(c => c.id === commentId
+      ? { ...c, likedByMe: !currentlyLiked, like_count: c.like_count + (currentlyLiked ? -1 : 1) }
+      : c));
+  }
+
   if (loading) return <div className="empty">불러오는 중...</div>;
   if (notFound) return <div className="empty">존재하지 않거나 삭제된 게시글입니다.</div>;
 
@@ -277,6 +304,14 @@ export default function PostDetail() {
                 <>
                   <span className="comment-author">{c.authorName}</span>
                   {c.content}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    style={{ marginLeft: 8, color: c.likedByMe ? '#e0245e' : undefined }}
+                    onClick={() => toggleCommentLike(c.id, c.likedByMe)}
+                  >
+                    {c.likedByMe ? '❤️' : '🤍'} {c.like_count || 0}
+                  </button>
                   <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}>답글</button>
                   {user && user.id === c.author_id && (
                     <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditComment(c)}>수정</button>
@@ -299,6 +334,14 @@ export default function PostDetail() {
                   <>
                     <span className="comment-author">↳ {r.authorName}</span>
                     {r.content}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      style={{ marginLeft: 8, color: r.likedByMe ? '#e0245e' : undefined }}
+                      onClick={() => toggleCommentLike(r.id, r.likedByMe)}
+                    >
+                      {r.likedByMe ? '❤️' : '🤍'} {r.like_count || 0}
+                    </button>
                     {user && user.id === r.author_id && (
                       <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditComment(r)}>수정</button>
                     )}

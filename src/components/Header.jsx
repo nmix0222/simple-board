@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useTheme } from '../ThemeContext.jsx';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
+import NotificationBell from './NotificationBell.jsx';
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -12,9 +13,12 @@ export default function Header() {
         <Link to="/" className="site-title">
           <h1>📋 간단 게시판</h1>
         </Link>
-        <button type="button" className="theme-toggle" onClick={toggleTheme} title="테마 전환">
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        <div className="header-actions">
+          <NotificationBell />
+          <button type="button" className="theme-toggle" onClick={toggleTheme} title="테마 전환">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </div>
       <div className="auth-strip">
         {user ? (
