@@ -21,11 +21,11 @@ const GRADUATION_PAPER_IDS = new Set([
 // 이 페이퍼 자체는 메시지를 받지 않고, 5개 반 롤링페이퍼로 바로 이동하는 화면만 보여준다.
 const HUB_PAPER_ID = 'a24bb060-e633-4d57-a712-f1b7231f1256';
 const HUB_LINKS = [
-  { id: '5dcc2fd1-9f7e-4ac2-997f-5d0004e97963', pk: '000301', label: '1반 선생님께' },
-  { id: '2141d98f-bff6-4d6b-9590-fce705ca58bb', pk: '000302', label: '2반 선생님께' },
-  { id: '5762e3a0-a92f-418e-b436-daf8ae0c64ed', pk: '000303', label: '3반 선생님께' },
-  { id: 'f0484365-7144-47fa-ad58-8ab033ca3fce', pk: '000304', label: '4반 선생님께' },
-  { id: 'f87bb8e5-8a09-4e56-8ac0-668c1d7ddc9d', pk: '000305', label: '모든 선생님께' }
+  { id: '5dcc2fd1-9f7e-4ac2-997f-5d0004e97963', pk: '정읍고1반', label: '1반 선생님께' },
+  { id: '2141d98f-bff6-4d6b-9590-fce705ca58bb', pk: '정읍고2반', label: '2반 선생님께' },
+  { id: '5762e3a0-a92f-418e-b436-daf8ae0c64ed', pk: '정읍고3반', label: '3반 선생님께' },
+  { id: 'f0484365-7144-47fa-ad58-8ab033ca3fce', pk: '정읍고4반', label: '4반 선생님께' },
+  { id: 'f87bb8e5-8a09-4e56-8ac0-668c1d7ddc9d', pk: '정읍고전체', label: '모든 선생님께' }
 ];
 
 function fireConfetti() {
@@ -456,7 +456,7 @@ export default function RollingPaperDetail() {
                 type="button"
                 key={link.id}
                 className="hub-link-card"
-                onClick={() => navigate(`/paper/${link.id}?pk=${link.pk}`)}
+                onClick={() => navigate(`/paper/${link.id}?pk=${encodeURIComponent(link.pk)}`)}
               >
                 <span>{link.label}</span>
                 <span className="hub-link-arrow">→</span>
