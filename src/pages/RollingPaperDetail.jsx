@@ -6,6 +6,27 @@ import { formatDateTime as formatDate } from '../lib/format.js';
 
 const CARD_COLORS = ['#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5'];
 
+// 졸업식 날 선생님께 드리는 5개 롤링페이퍼에만 축하 연출(색종이, 배경음악, 코르크보드 느낌)을 적용한다.
+const GRADUATION_PAPER_IDS = new Set([
+  '5dcc2fd1-9f7e-4ac2-997f-5d0004e97963',
+  '2141d98f-bff6-4d6b-9590-fce705ca58bb',
+  '5762e3a0-a92f-418e-b436-daf8ae0c64ed',
+  'f0484365-7144-47fa-ad58-8ab033ca3fce',
+  'f87bb8e5-8a09-4e56-8ac0-668c1d7ddc9d'
+]);
+
+function fireConfetti() {
+  import('canvas-confetti').then(({ default: confetti }) => {
+    const duration = 2200;
+    const end = Date.now() + duration;
+    (function frame() {
+      confetti({ particleCount: 4, angle: 60, spread: 60, origin: { x: 0 }, colors: ['#ffb703', '#fb8500', '#8ecae6', '#ffafcc'] });
+      confetti({ particleCount: 4, angle: 120, spread: 60, origin: { x: 1 }, colors: ['#ffb703', '#fb8500', '#8ecae6', '#ffafcc'] });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  });
+}
+
 export default function RollingPaperDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -13,6 +34,9 @@ export default function RollingPaperDetail() {
   const [searchParams] = useSearchParams();
   const wallRef = useRef(null);
   const qrCanvasRef = useRef(null);
+  const audioRef = useRef(null);
+  const isGraduation = GRADUATION_PAPER_IDS.has(id);
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
   const [paper, setPaper] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +83,26 @@ export default function RollingPaperDetail() {
     loadMessages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlocked, id]);
+
+  useEffect(() => {
+    if (unlocked && isGraduation) fireConfetti();
+  }, [unlocked, isGraduation]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) audioRef.current.pause();
+    };
+  }, []);
+
+  function toggleMusic() {
+    if (!audioRef.current) return;
+    if (musicPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+    setMusicPlaying(p => !p);
+  }
 
   useEffect(() => {
     if (!showQr || !qrCanvasRef.current || !paper) return;
@@ -108,6 +152,7 @@ export default function RollingPaperDetail() {
     if (err) { alert(err.message); return; }
     setMsgContent('');
     loadMessages();
+    if (isGraduation) fireConfetti();
   }
 
   async function handleDeletePaper() {
@@ -194,18 +239,27 @@ export default function RollingPaperDetail() {
 
   return (
     <>
-      <div className="wall-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+      {isGraduation && <audio ref={audioRef} src={`${import.meta.env.BASE_URL}bgm.mp3`} loop />}
+
+      <div className={`wall-header${isGraduation ? ' wall-header-graduation' : ''}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 700 }}>{paper.title}</div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>{isGraduation ? '🎓 ' : ''}{paper.title}</div>
           {isAdmin && <div style={{ fontSize: 12, color: 'var(--muted)' }}>관리자 권한으로 접근 중</div>}
           {paper.deadline && <div style={{ fontSize: 12, color: 'var(--muted)' }}>마감 {formatDate(paper.deadline)}</div>}
         </div>
-        {canModify && (
-          <span>
-            <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={startEdit}>수정</button>
-            <button type="button" className="btn-delete" onClick={handleDeletePaper}>삭제</button>
-          </span>
-        )}
+        <span style={{ display: 'flex', gap: 4 }}>
+          {isGraduation && unlocked && (
+            <button type="button" className="btn-secondary" onClick={toggleMusic} style={{ width: 'auto' }}>
+              {musicPlaying ? '🔇 음악 끄기' : '🎵 음악 재생'}
+            </button>
+          )}
+          {canModify && (
+            <>
+              <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={startEdit}>수정</button>
+              <button type="button" className="btn-delete" onClick={handleDeletePaper}>삭제</button>
+            </>
+          )}
+        </span>
       </div>
 
       {paper.description && <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>{paper.description}</p>}
@@ -253,12 +307,17 @@ export default function RollingPaperDetail() {
             </div>
           )}
 
-          <div className="message-wall" ref={wallRef}>
+          <div className={`message-wall${isGraduation ? ' corkboard' : ''}`} ref={wallRef}>
             {messages === null ? null : messages.length === 0 ? (
               <div className="empty">아직 남겨진 메시지가 없습니다.</div>
             ) : (
               messages.map((m, i) => (
-                <div className="message-card" style={{ background: CARD_COLORS[i % CARD_COLORS.length] }} key={m.id}>
+                <div
+                  className={`message-card${isGraduation ? ' pinned-note' : ''}`}
+                  style={{ background: CARD_COLORS[i % CARD_COLORS.length], '--tilt': `${((i * 37) % 9) - 4}deg` }}
+                  key={m.id}
+                >
+                  {isGraduation && <span className="pin-dot" aria-hidden="true">📌</span>}
                   <div className="message-author">{m.authorName}</div>
                   <div className="message-content">{m.content}</div>
                 </div>
