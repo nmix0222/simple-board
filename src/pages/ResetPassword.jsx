@@ -48,7 +48,7 @@ export default function ResetPassword() {
       </p>
       <form onSubmit={handleSubmit}>
         <div className="row">
-          <input type="email" placeholder="이메일로 가입한 계정만 입력" value={email} onChange={e => setEmail(e.target.value)} required />
+          <input type="email" aria-label="이메일" placeholder="이메일로 가입한 계정만 입력" value={email} onChange={e => setEmail(e.target.value)} required />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="actions">

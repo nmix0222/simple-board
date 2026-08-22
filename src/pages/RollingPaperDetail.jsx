@@ -310,10 +310,10 @@ export default function RollingPaperDetail() {
     return (
       <article className="post">
         <form onSubmit={saveEdit}>
-          <div className="row"><input type="text" placeholder="제목" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
-          <div className="row"><textarea placeholder="소개글 (선택)" value={editDescription} onChange={e => setEditDescription(e.target.value)} /></div>
+          <div className="row"><input type="text" aria-label="제목" placeholder="제목" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          <div className="row"><textarea aria-label="소개글" placeholder="소개글 (선택)" value={editDescription} onChange={e => setEditDescription(e.target.value)} /></div>
           <div className="row">
-            <input type="datetime-local" value={editDeadline} onChange={e => setEditDeadline(e.target.value)} title="마감일 (선택)" />
+            <input type="datetime-local" aria-label="마감일" value={editDeadline} onChange={e => setEditDeadline(e.target.value)} title="마감일 (선택)" />
           </div>
           <div className="actions" style={{ gap: 8 }}>
             <button type="button" className="btn-secondary" onClick={() => setEditing(false)}>취소</button>
@@ -353,7 +353,7 @@ export default function RollingPaperDetail() {
 
       {!unlocked ? (
         <form className="comment-form" onSubmit={handleUnlock}>
-          <input type="text" placeholder="패스키 입력" value={passkeyInput} onChange={e => setPasskeyInput(e.target.value)} />
+          <input type="text" aria-label="패스키" placeholder="패스키 입력" value={passkeyInput} onChange={e => setPasskeyInput(e.target.value)} />
           <button className="btn-primary" type="submit">입장</button>
         </form>
       ) : (
@@ -364,15 +364,15 @@ export default function RollingPaperDetail() {
               <form onSubmit={handleAddMessage}>
                 {!msgAnonymous && (
                   <div className="row">
-                    <input type="text" placeholder="학번 이름 (예: 0315 홍길동)" value={msgName} onChange={e => setMsgName(e.target.value)} style={{ maxWidth: 200 }} />
+                    <input type="text" aria-label="이름" placeholder="학번 이름 (예: 0315 홍길동)" value={msgName} onChange={e => setMsgName(e.target.value)} style={{ maxWidth: 200 }} />
                   </div>
                 )}
                 <div className="row">
-                  <textarea placeholder="따뜻한 메시지를 남겨주세요" value={msgContent} onChange={e => setMsgContent(e.target.value)} />
+                  <textarea aria-label="메시지 내용" placeholder="따뜻한 메시지를 남겨주세요" value={msgContent} onChange={e => setMsgContent(e.target.value)} />
                 </div>
                 {paper.allow_anonymous && (
                   <label style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 }}>
-                    <input type="checkbox" checked={msgAnonymous} onChange={e => setMsgAnonymous(e.target.checked)} style={{ width: 'auto' }} />
+                    <input type="checkbox" aria-label="익명으로 작성하기" checked={msgAnonymous} onChange={e => setMsgAnonymous(e.target.checked)} style={{ width: 'auto' }} />
                     익명으로 남기기
                   </label>
                 )}
@@ -458,14 +458,14 @@ export default function RollingPaperDetail() {
                 <form onSubmit={e => submitReply(e, openReplyId)} style={{ marginTop: 10 }}>
                   {!replyAnonymous && (
                     <div className="row">
-                      <input type="text" placeholder="이름 (예: 김민수 선생님)" value={replyName} onChange={e => setReplyName(e.target.value)} style={{ maxWidth: 200 }} />
+                      <input type="text" aria-label="이름" placeholder="이름 (예: 김민수 선생님)" value={replyName} onChange={e => setReplyName(e.target.value)} style={{ maxWidth: 200 }} />
                     </div>
                   )}
                   <div className="row">
-                    <input type="text" placeholder="답장을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
+                    <input type="text" aria-label="답장" placeholder="답장을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
                   </div>
                   <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-                    <input type="checkbox" checked={replyAnonymous} onChange={e => setReplyAnonymous(e.target.checked)} style={{ width: 'auto' }} />
+                    <input type="checkbox" aria-label="익명으로 답장하기" checked={replyAnonymous} onChange={e => setReplyAnonymous(e.target.checked)} style={{ width: 'auto' }} />
                     익명으로 답장하기
                   </label>
                   <div className="actions">

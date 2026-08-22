@@ -200,15 +200,15 @@ export default function PostDetail() {
       <article className="post">
         <form onSubmit={saveEdit}>
           <div className="row">
-            <select value={editTag} onChange={e => setEditTag(e.target.value)}>
+            <select aria-label="태그" value={editTag} onChange={e => setEditTag(e.target.value)}>
               {TAGS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div className="row"><input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
-          <div className="row"><textarea value={editContent} onChange={e => setEditContent(e.target.value)} /></div>
+          <div className="row"><input type="text" aria-label="제목" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          <div className="row"><textarea aria-label="내용" value={editContent} onChange={e => setEditContent(e.target.value)} /></div>
           <div className="row color-picker">
-            {POST_COLORS.map(c => (
-              <button key={c} type="button" className={`color-swatch${c === editColor ? ' selected' : ''}`} style={{ background: c }} onClick={() => setEditColor(c)} />
+            {POST_COLORS.map((c, i) => (
+              <button key={c} type="button" aria-label={`배경색 ${i + 1}`} aria-pressed={c === editColor} className={`color-swatch${c === editColor ? ' selected' : ''}`} style={{ background: c }} onClick={() => setEditColor(c)} />
             ))}
           </div>
           <div className="actions" style={{ gap: 8 }}>
@@ -269,7 +269,7 @@ export default function PostDetail() {
             <div className="comment-item">
               {editingCommentId === c.id ? (
                 <form onSubmit={e => saveEditComment(e, c.id)} style={{ display: 'flex', gap: 6 }}>
-                  <input type="text" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} style={{ flex: 1 }} />
+                  <input type="text" aria-label="댓글 수정" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} style={{ flex: 1 }} />
                   <button className="btn-primary" type="submit" style={{ width: 'auto' }}>저장</button>
                   <button type="button" className="btn-secondary" style={{ width: 'auto' }} onClick={cancelEditComment}>취소</button>
                 </form>
@@ -291,7 +291,7 @@ export default function PostDetail() {
               <div className="comment-item" key={r.id} style={{ marginLeft: 24 }}>
                 {editingCommentId === r.id ? (
                   <form onSubmit={e => saveEditComment(e, r.id)} style={{ display: 'flex', gap: 6 }}>
-                    <input type="text" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} style={{ flex: 1 }} />
+                    <input type="text" aria-label="댓글 수정" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} style={{ flex: 1 }} />
                     <button className="btn-primary" type="submit" style={{ width: 'auto' }}>저장</button>
                     <button type="button" className="btn-secondary" style={{ width: 'auto' }} onClick={cancelEditComment}>취소</button>
                   </form>
@@ -311,14 +311,14 @@ export default function PostDetail() {
             ))}
             {replyTo === c.id && (
               <form className="comment-form" style={{ marginLeft: 24 }} onSubmit={e => submitComment(e, c.id)}>
-                <input type="text" placeholder="답글을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
+                <input type="text" aria-label="답글" placeholder="답글을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
                 <button className="btn-primary" type="submit">등록</button>
               </form>
             )}
           </div>
         ))}
         <form className="comment-form" onSubmit={e => submitComment(e)}>
-          <input type="text" placeholder={user ? '댓글을 입력하세요' : '로그인 후 댓글을 작성할 수 있습니다'} value={commentText} onChange={e => setCommentText(e.target.value)} disabled={!user} />
+          <input type="text" aria-label="댓글" placeholder={user ? '댓글을 입력하세요' : '로그인 후 댓글을 작성할 수 있습니다'} value={commentText} onChange={e => setCommentText(e.target.value)} disabled={!user} />
           <button className="btn-primary" type="submit" disabled={!user}>등록</button>
         </form>
       </div>

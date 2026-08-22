@@ -99,11 +99,11 @@ export default function ProfilePage() {
     <div className="write-box">
       <h2>프로필</h2>
       <div className="row">
-        <input type="text" value={displayUsername(user.email)} disabled style={{ opacity: 0.6 }} />
+        <input type="text" aria-label="아이디" value={displayUsername(user.email)} disabled style={{ opacity: 0.6 }} />
       </div>
       <form onSubmit={handleSave}>
         <div className="row">
-          <input type="text" placeholder="닉네임" value={nickname} onChange={e => setNickname(e.target.value)} />
+          <input type="text" aria-label="닉네임" placeholder="닉네임" value={nickname} onChange={e => setNickname(e.target.value)} />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         {message && <div style={{ color: 'var(--accent)', fontSize: 13, marginBottom: 8 }}>{message}</div>}
@@ -117,7 +117,7 @@ export default function ProfilePage() {
         <h3 style={{ fontSize: 15, margin: '0 0 10px' }}>비밀번호 변경</h3>
         <form onSubmit={handlePasswordChange}>
           <div className="row">
-            <input type="password" placeholder="새 비밀번호 (6자 이상)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+            <input type="password" aria-label="새 비밀번호" placeholder="새 비밀번호 (6자 이상)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
           </div>
           {pwError && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{pwError}</div>}
           {pwMessage && <div style={{ color: 'var(--accent)', fontSize: 13, marginBottom: 8 }}>{pwMessage}</div>}

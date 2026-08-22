@@ -225,12 +225,12 @@ export default function Board() {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="row">
-                <select value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+                <select aria-label="카테고리" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   <option value={ROLLING_PAPER}>롤링페이퍼</option>
                 </select>
                 {!isRollingPaper && (
-                  <select value={tag} onChange={e => setTag(e.target.value)} style={{ maxWidth: 110 }}>
+                  <select aria-label="태그" value={tag} onChange={e => setTag(e.target.value)} style={{ maxWidth: 110 }}>
                     {TAGS.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 )}
@@ -238,6 +238,7 @@ export default function Board() {
               <div className="row">
                 <input
                   type="text"
+                  aria-label="제목"
                   placeholder={isRollingPaper ? '롤링페이퍼 제목 (예: OOO를 위한 롤링페이퍼)' : '제목'}
                   value={title}
                   onChange={e => setTitle(e.target.value)}
@@ -245,6 +246,7 @@ export default function Board() {
               </div>
               <div className="row">
                 <textarea
+                  aria-label="내용"
                   placeholder={isRollingPaper ? '소개글 (선택)' : '내용을 입력하세요'}
                   value={content}
                   onChange={e => setContent(e.target.value)}
@@ -252,10 +254,12 @@ export default function Board() {
               </div>
               {!isRollingPaper && (
                 <div className="row color-picker">
-                  {POST_COLORS.map(c => (
+                  {POST_COLORS.map((c, i) => (
                     <button
                       key={c}
                       type="button"
+                      aria-label={`배경색 ${i + 1}`}
+                      aria-pressed={c === color}
                       className={`color-swatch${c === color ? ' selected' : ''}`}
                       style={{ background: c }}
                       onClick={() => setColor(c)}
@@ -268,6 +272,7 @@ export default function Board() {
                   <div className="row">
                     <input
                       type="datetime-local"
+                      aria-label="마감일"
                       value={deadline}
                       onChange={e => setDeadline(e.target.value)}
                       title="마감일 (선택) — 지나면 자동으로 정리됩니다"
@@ -325,7 +330,7 @@ export default function Board() {
       </div>
 
       <div className="row">
-        <input type="text" placeholder="제목, 내용 검색" value={search} onChange={e => setSearch(e.target.value)} />
+        <input type="text" aria-label="게시글 검색" placeholder="제목, 내용 검색" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {currentTab !== '롤링페이퍼' && (

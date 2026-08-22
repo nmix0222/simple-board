@@ -318,7 +318,7 @@ export default function Admin() {
       {tab === 'comments' && (
         <>
           <div className="row" style={{ marginBottom: 12 }}>
-            <input type="text" placeholder="댓글 내용 검색" value={commentSearch} onChange={e => setCommentSearch(e.target.value)} />
+            <input type="text" aria-label="댓글 내용 검색" placeholder="댓글 내용 검색" value={commentSearch} onChange={e => setCommentSearch(e.target.value)} />
           </div>
           {filteredComments.length === 0 ? <div className="empty">댓글이 없습니다.</div> : filteredComments.map(c => (
             <article className="post" key={c.id}>
@@ -396,8 +396,8 @@ export default function Admin() {
           <section className="write-box">
             <h2>새 공지사항</h2>
             <form onSubmit={createNotice}>
-              <div className="row"><input type="text" placeholder="제목" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} /></div>
-              <div className="row"><textarea placeholder="내용" value={noticeContent} onChange={e => setNoticeContent(e.target.value)} /></div>
+              <div className="row"><input type="text" aria-label="공지 제목" placeholder="제목" value={noticeTitle} onChange={e => setNoticeTitle(e.target.value)} /></div>
+              <div className="row"><textarea aria-label="공지 내용" placeholder="내용" value={noticeContent} onChange={e => setNoticeContent(e.target.value)} /></div>
               <div className="actions"><button className="btn-primary" type="submit">등록</button></div>
             </form>
           </section>
@@ -429,8 +429,8 @@ export default function Admin() {
           <section className="write-box">
             <h2>새 카테고리</h2>
             <form onSubmit={addCategory}>
-              <div className="row"><input type="text" placeholder="이름 (예: 유머)" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} /></div>
-              <div className="row"><input type="text" placeholder="slug (예: humor, 영문/숫자/하이픈)" value={newCategorySlug} onChange={e => setNewCategorySlug(e.target.value)} /></div>
+              <div className="row"><input type="text" aria-label="카테고리 이름" placeholder="이름 (예: 유머)" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} /></div>
+              <div className="row"><input type="text" aria-label="카테고리 slug" placeholder="slug (예: humor, 영문/숫자/하이픈)" value={newCategorySlug} onChange={e => setNewCategorySlug(e.target.value)} /></div>
               <div className="actions"><button className="btn-primary" type="submit">추가</button></div>
             </form>
           </section>
@@ -457,7 +457,7 @@ export default function Admin() {
               등록된 단어가 포함된 게시글·댓글·롤링페이퍼 메시지는 서버에서 등록이 차단됩니다.
             </p>
             <form onSubmit={addBannedWord}>
-              <div className="row"><input type="text" placeholder="금칙어 입력" value={newBannedWord} onChange={e => setNewBannedWord(e.target.value)} /></div>
+              <div className="row"><input type="text" aria-label="금칙어" placeholder="금칙어 입력" value={newBannedWord} onChange={e => setNewBannedWord(e.target.value)} /></div>
               <div className="actions"><button className="btn-primary" type="submit">추가</button></div>
             </form>
           </section>

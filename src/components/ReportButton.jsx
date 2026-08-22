@@ -28,7 +28,10 @@ export default function ReportButton({ targetType, targetId }) {
       reason,
       detail: detail.trim() || null
     });
-    if (error) { alert(error.message); return; }
+    if (error) {
+      alert(error.message.includes('duplicate') ? '이미 신고한 콘텐츠입니다.' : error.message);
+      return;
+    }
     setDone(true);
     setTimeout(() => { setOpen(false); setDone(false); }, 1200);
   }
@@ -43,11 +46,12 @@ export default function ReportButton({ targetType, targetId }) {
         <span style={{ fontSize: 12, color: 'var(--accent)' }}>신고가 접수되었습니다</span>
       ) : (
         <form onSubmit={submit} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-          <select value={reason} onChange={e => setReason(e.target.value)} style={{ width: 'auto', padding: '4px 6px', fontSize: 12 }}>
+          <select aria-label="신고 사유" value={reason} onChange={e => setReason(e.target.value)} style={{ width: 'auto', padding: '4px 6px', fontSize: 12 }}>
             {REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
           <input
             type="text"
+            aria-label="상세 사유"
             placeholder="상세 사유 (선택)"
             value={detail}
             onChange={e => setDetail(e.target.value)}

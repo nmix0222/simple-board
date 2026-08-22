@@ -35,10 +35,10 @@ export default function SignIn() {
       <h2>로그인</h2>
       <form onSubmit={handleSubmit}>
         <div className="row">
-          <input type="text" placeholder="아이디" value={username} onChange={e => setUsername(e.target.value)} required />
+          <input type="text" aria-label="아이디" placeholder="아이디" value={username} onChange={e => setUsername(e.target.value)} required />
         </div>
         <div className="row">
-          <input type="password" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} />
+          <input type="password" aria-label="비밀번호" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="actions">

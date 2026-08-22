@@ -632,7 +632,9 @@ create table reports (
   reason text not null check (reason in ('abuse', 'defamation', 'sexual', 'privacy', 'spam', 'other')),
   detail text,
   status text not null default 'pending' check (status in ('pending', 'reviewing', 'resolved', 'dismissed')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 같은 사용자가 같은 대상을 반복 신고하지 못하게 막는다.
+  constraint reports_no_duplicate unique (reporter_id, target_type, target_id)
 );
 
 alter table reports enable row level security;

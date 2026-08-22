@@ -64,13 +64,13 @@ export default function SignUp() {
       <h2>회원가입</h2>
       <form onSubmit={handleSubmit}>
         <div className="row">
-          <input type="text" placeholder="아이디 (2자 이상)" value={username} onChange={e => setUsername(e.target.value)} required />
+          <input type="text" aria-label="아이디" placeholder="아이디 (2자 이상)" value={username} onChange={e => setUsername(e.target.value)} required />
         </div>
         <div className="row">
-          <input type="text" placeholder="닉네임 (2자 이상)" value={nickname} onChange={e => setNickname(e.target.value)} />
+          <input type="text" aria-label="닉네임" placeholder="닉네임 (2자 이상)" value={nickname} onChange={e => setNickname(e.target.value)} />
         </div>
         <div className="row">
-          <input type="password" placeholder="비밀번호 (6자 이상)" value={password} onChange={e => setPassword(e.target.value)} />
+          <input type="password" aria-label="비밀번호" placeholder="비밀번호 (6자 이상)" value={password} onChange={e => setPassword(e.target.value)} />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="actions">

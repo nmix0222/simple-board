@@ -13,8 +13,8 @@ export default function UpdatePassword() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (password.length < 8) {
-      setError('비밀번호는 8자 이상 입력해주세요.');
+    if (password.length < 6) {
+      setError('비밀번호는 6자 이상 입력해주세요.');
       return;
     }
     setSubmitting(true);
@@ -43,7 +43,7 @@ export default function UpdatePassword() {
       <h2>새 비밀번호 설정</h2>
       <form onSubmit={handleSubmit}>
         <div className="row">
-          <input type="password" placeholder="새 비밀번호 (8자 이상)" value={password} onChange={e => setPassword(e.target.value)} />
+          <input type="password" aria-label="새 비밀번호" placeholder="새 비밀번호 (6자 이상)" value={password} onChange={e => setPassword(e.target.value)} />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="actions">
