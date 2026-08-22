@@ -11,6 +11,7 @@ drop view if exists rolling_paper_messages_public cascade;
 drop view if exists rolling_papers_public cascade;
 drop table if exists notifications cascade;
 drop table if exists comment_likes cascade;
+drop table if exists rolling_paper_verify_attempts cascade;
 drop table if exists banned_words cascade;
 drop table if exists admin_activity_logs cascade;
 drop table if exists user_restrictions cascade;
@@ -580,15 +581,39 @@ end;
 $$;
 grant execute on function create_rolling_paper(text, uuid, text, text, text, text, boolean, timestamptz) to authenticated;
 
+-- 패스키 무차별 대입(brute force) 방지: 같은 롤링페이퍼에 1분에 10번 넘게 시도하면 잠시 막는다.
+-- 로그인 없이도 시도 가능하므로(익명 접근 허용) 사용자 단위가 아니라 페이퍼 단위로 제한한다.
+create table rolling_paper_verify_attempts (
+  id bigserial primary key,
+  paper_id uuid not null,
+  created_at timestamptz not null default now()
+);
+create index rpva_paper_time_idx on rolling_paper_verify_attempts(paper_id, created_at);
+
 -- 패스키 확인 (메시지 작성 폼을 보여줄지 판단하는 용도)
 create function verify_rolling_paper_passkey(p_paper_id uuid, p_passkey text) returns boolean
-language sql security definer set search_path = public, extensions as $$
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_recent_attempts integer;
+  v_ok boolean;
+begin
+  select count(*) into v_recent_attempts from rolling_paper_verify_attempts
+    where paper_id = p_paper_id and created_at > now() - interval '1 minute';
+  if v_recent_attempts >= 10 then
+    raise exception '너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.';
+  end if;
+
+  insert into rolling_paper_verify_attempts (paper_id) values (p_paper_id);
+
   select exists (
     select 1 from rolling_papers
     where id = p_paper_id
       and visibility = 'passkey'
       and passkey_hash = encode(digest(p_passkey, 'sha256'), 'hex')
-  );
+  ) into v_ok;
+
+  return v_ok;
+end;
 $$;
 grant execute on function verify_rolling_paper_passkey(uuid, text) to anon, authenticated;
 
@@ -994,6 +1019,11 @@ select cron.schedule(
   'expire-rolling-papers',
   '0 * * * *',
   $cron$ update rolling_papers set is_deleted = true where deadline is not null and deadline < now() and not is_deleted; $cron$
+);
+select cron.schedule(
+  'cleanup-passkey-attempts',
+  '0 * * * *',
+  $cron$ delete from rolling_paper_verify_attempts where created_at < now() - interval '1 hour'; $cron$
 );
 
 -- ------------------------------------------------------------

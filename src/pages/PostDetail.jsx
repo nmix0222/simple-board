@@ -173,12 +173,19 @@ export default function PostDetail() {
     setEditImageRemoved(true);
   }
 
+  function storagePathFromUrl(url) {
+    const marker = '/post-images/';
+    const i = url?.indexOf(marker);
+    return i >= 0 ? url.slice(i + marker.length) : null;
+  }
+
   async function saveEdit(e) {
     e.preventDefault();
     if (!editTitle.trim() || !editContent.trim()) {
       alert('제목과 내용을 입력해주세요.');
       return;
     }
+    const oldImageUrl = post.image_url;
     let imageUrl = editImageRemoved ? null : editImageUrl;
     if (editImageFile) {
       const path = `${user.id}/${Date.now()}-${editImageFile.name}`;
@@ -190,6 +197,12 @@ export default function PostDetail() {
       title: editTitle.trim(), content: editContent.trim(), tag: editTag, color: editColor, image_url: imageUrl
     }).eq('id', id);
     if (error) { alert(error.message); return; }
+    // 이미지를 교체하거나 제거했으면, 더 이상 안 쓰는 예전 파일을 스토리지에서 같이 지운다
+    // (안 지우면 아무도 안 쓰는 파일이 계속 쌓이기만 함).
+    if (oldImageUrl && oldImageUrl !== imageUrl) {
+      const oldPath = storagePathFromUrl(oldImageUrl);
+      if (oldPath) await supabase.storage.from('post-images').remove([oldPath]);
+    }
     setEditing(false);
     load();
   }
