@@ -49,6 +49,7 @@ drop function if exists notify_on_comment() cascade;
 drop function if exists notify_on_rolling_paper_message() cascade;
 drop function if exists notify_on_message_comment() cascade;
 drop function if exists bump_comment_like_count() cascade;
+drop function if exists auto_flag_on_report_threshold() cascade;
 drop function if exists enforce_message_comment_content_rules() cascade;
 drop function if exists enforce_rolling_paper_message_update_rules() cascade;
 drop trigger if exists on_auth_user_created on auth.users;
@@ -186,6 +187,7 @@ create table posts (
   comment_count integer not null default 0,
   is_pinned boolean not null default false,
   is_deleted boolean not null default false,
+  is_flagged boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -217,7 +219,7 @@ create trigger posts_protect_fields
   for each row execute function protect_post_moderation_fields();
 
 alter table posts enable row level security;
-create policy posts_select_public on posts for select using (not is_deleted or is_admin() or author_id = auth.uid());
+create policy posts_select_public on posts for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
 create policy posts_insert_own on posts for insert with check (auth.uid() is not null and author_id = auth.uid());
 create policy posts_update_own_or_admin on posts for update using (author_id = auth.uid() or is_admin());
 create policy posts_delete_admin_only on posts for delete using (is_admin());
@@ -284,6 +286,7 @@ create table comments (
   author_id uuid not null references profiles(id) on delete cascade,
   content text not null,
   is_deleted boolean not null default false,
+  is_flagged boolean not null default false,
   like_count integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -326,7 +329,7 @@ create trigger comments_after_soft_delete
   for each row execute function bump_post_comment_count();
 
 alter table comments enable row level security;
-create policy comments_select_public on comments for select using (not is_deleted or is_admin() or author_id = auth.uid());
+create policy comments_select_public on comments for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
 create policy comments_insert_own on comments for insert with check (auth.uid() is not null and author_id = auth.uid());
 create policy comments_update_own_or_admin on comments for update using (author_id = auth.uid() or is_admin());
 create policy comments_delete_admin_only on comments for delete using (is_admin());
@@ -815,6 +818,40 @@ alter table reports enable row level security;
 create policy reports_select_own_or_admin on reports for select using (reporter_id = auth.uid() or is_admin());
 create policy reports_insert_own on reports for insert with check (auth.uid() is not null and reporter_id = auth.uid());
 create policy reports_update_admin_only on reports for update using (is_admin());
+
+-- 서로 다른 사용자 3명 이상이 같은 글/댓글을 신고하면, 관리자가 확인하기 전까지
+-- 자동으로 다른 사용자에게 숨긴다 (작성자 본인과 관리자에게는 계속 보임).
+create function auto_flag_on_report_threshold() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_distinct_reporters integer;
+  v_threshold constant integer := 3;
+begin
+  if new.target_type not in ('post', 'comment') then
+    return new;
+  end if;
+
+  select count(distinct reporter_id) into v_distinct_reporters
+  from reports
+  where target_type = new.target_type
+    and target_id = new.target_id
+    and status in ('pending', 'reviewing');
+
+  if v_distinct_reporters >= v_threshold then
+    if new.target_type = 'post' then
+      update posts set is_flagged = true where id = new.target_id;
+    elsif new.target_type = 'comment' then
+      update comments set is_flagged = true where id = new.target_id;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger reports_auto_flag_after_insert
+  after insert on reports
+  for each row execute function auto_flag_on_report_threshold();
 
 -- ------------------------------------------------------------
 -- 10. report_actions

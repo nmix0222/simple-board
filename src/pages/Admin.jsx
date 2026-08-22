@@ -193,6 +193,10 @@ export default function Admin() {
   async function logAction(report, status, action) {
     await supabase.from('reports').update({ status }).eq('id', report.id);
     await supabase.from('report_actions').insert({ report_id: report.id, admin_id: user.id, action });
+    if ((action === 'keep_content' || action === 'dismiss') && (report.target_type === 'post' || report.target_type === 'comment')) {
+      const table = report.target_type === 'post' ? 'posts' : 'comments';
+      await supabase.from(table).update({ is_flagged: false }).eq('id', report.target_id);
+    }
     await logAdmin('report_' + action, report.target_type, report.target_id, { report_id: report.id, reason: report.reason });
     setReports(reports.map(r => r.id === report.id ? { ...r, status } : r));
   }
@@ -305,6 +309,7 @@ export default function Admin() {
             <div className="post-title">
               {post.is_pinned && <span className="post-category pinned">📌</span>}
               {post.is_deleted && <span className="post-category" style={{ color: 'var(--danger)' }}>삭제됨</span>}
+              {post.is_flagged && !post.is_deleted && <span className="post-category" style={{ color: 'var(--danger)' }}>🚩 신고 누적(숨김)</span>}
               {post.title}
             </div>
           </div>
@@ -330,6 +335,7 @@ export default function Admin() {
               <div className="post-top">
                 <div className="post-meta">
                   {c.is_deleted && <span className="post-category" style={{ color: 'var(--danger)' }}>삭제됨</span>}
+                  {c.is_flagged && !c.is_deleted && <span className="post-category" style={{ color: 'var(--danger)' }}>🚩 신고 누적(숨김)</span>}
                   {formatDate(c.created_at)}
                 </div>
               </div>

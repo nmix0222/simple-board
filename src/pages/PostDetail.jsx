@@ -258,6 +258,11 @@ export default function PostDetail() {
 
   return (
     <>
+      {post.is_flagged && !isAdmin && (
+        <div className="callout" style={{ marginBottom: 12, fontSize: 13 }}>
+          🚩 여러 사용자의 신고가 접수되어 관리자 확인 전까지 다른 사용자에게는 이 글이 보이지 않습니다.
+        </div>
+      )}
       <article
         className={`post${post.color && post.color !== '#ffffff' ? ' post-colored' : ''}`}
         style={post.color && post.color !== '#ffffff' ? { background: post.color } : undefined}
