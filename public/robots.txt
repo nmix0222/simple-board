@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://nmix0222.github.io/simple-board/sitemap.xml
+Sitemap: https://simple-board-six.vercel.app/sitemap.xml
