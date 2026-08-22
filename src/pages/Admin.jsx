@@ -16,7 +16,8 @@ const LOG_ACTION_LABELS = {
   create_notice: '공지 등록', delete_notice: '공지 삭제', add_banned_word: '금칙어 추가',
   delete_banned_word: '금칙어 삭제', unrestrict_user: '이용제한 해제',
   report_deferred: '신고 검토중 처리', report_keep_content: '신고 콘텐츠 유지', report_delete_content: '신고 콘텐츠 삭제',
-  report_dismiss: '신고 기각', create_category: '카테고리 추가', delete_category: '카테고리 삭제'
+  report_dismiss: '신고 기각', create_category: '카테고리 추가', delete_category: '카테고리 삭제',
+  toggle_notice_pin: '공지 고정 변경'
 };
 
 export default function Admin() {
@@ -156,6 +157,12 @@ export default function Admin() {
     await supabase.from('notices').delete().eq('id', id);
     await logAdmin('delete_notice', 'notice', id);
     loadNotices();
+  }
+
+  async function toggleNoticePin(notice) {
+    await supabase.from('notices').update({ is_pinned: !notice.is_pinned }).eq('id', notice.id);
+    await logAdmin('toggle_notice_pin', 'notice', notice.id, { is_pinned: !notice.is_pinned });
+    setNotices(notices.map(n => n.id === notice.id ? { ...n, is_pinned: !n.is_pinned } : n));
   }
 
   async function togglePin(post) {
@@ -396,11 +403,21 @@ export default function Admin() {
           </section>
           {notices.map(n => (
             <article className="post" key={n.id}>
-              <div className="post-top"><div className="post-title">{n.title}</div></div>
+              <div className="post-top">
+                <div className="post-title">
+                  {n.is_pinned && <span className="post-category pinned">📌</span>}
+                  {n.title}
+                </div>
+              </div>
               <div className="post-body">{n.content}</div>
               <div className="post-footer">
                 <span />
-                <button type="button" className="btn-delete" onClick={() => deleteNotice(n.id)}>삭제</button>
+                <span>
+                  <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={() => toggleNoticePin(n)}>
+                    {n.is_pinned ? '고정 해제' : '고정'}
+                  </button>
+                  <button type="button" className="btn-delete" onClick={() => deleteNotice(n.id)}>삭제</button>
+                </span>
               </div>
             </article>
           ))}

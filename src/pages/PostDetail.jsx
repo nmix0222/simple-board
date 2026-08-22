@@ -33,6 +33,8 @@ export default function PostDetail() {
   const [replyTo, setReplyTo] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   const canModify = post && user && (post.author_id === user.id || isAdmin);
 
@@ -158,6 +160,25 @@ export default function PostDetail() {
     load();
   }
 
+  function startEditComment(c) {
+    setEditingCommentId(c.id);
+    setEditingCommentText(c.content);
+  }
+
+  function cancelEditComment() {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  }
+
+  async function saveEditComment(e, commentId) {
+    e.preventDefault();
+    if (!editingCommentText.trim()) { alert('내용을 입력해주세요.'); return; }
+    const { error } = await supabase.from('comments').update({ content: editingCommentText.trim() }).eq('id', commentId);
+    if (error) { alert(error.message); return; }
+    cancelEditComment();
+    load();
+  }
+
   async function deleteComment(commentId) {
     if (!confirm('댓글을 삭제하시겠습니까?')) return;
     if (isAdmin) {
@@ -246,19 +267,45 @@ export default function PostDetail() {
         {topLevel.map(c => (
           <div key={c.id}>
             <div className="comment-item">
-              <span className="comment-author">{c.authorName}</span>
-              {c.content}
-              <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}>답글</button>
-              {user && (user.id === c.author_id || isAdmin) && (
-                <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(c.id)}>삭제</button>
+              {editingCommentId === c.id ? (
+                <form onSubmit={e => saveEditComment(e, c.id)} style={{ display: 'flex', gap: 6 }}>
+                  <input type="text" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} style={{ flex: 1 }} />
+                  <button className="btn-primary" type="submit" style={{ width: 'auto' }}>저장</button>
+                  <button type="button" className="btn-secondary" style={{ width: 'auto' }} onClick={cancelEditComment}>취소</button>
+                </form>
+              ) : (
+                <>
+                  <span className="comment-author">{c.authorName}</span>
+                  {c.content}
+                  <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}>답글</button>
+                  {user && user.id === c.author_id && (
+                    <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditComment(c)}>수정</button>
+                  )}
+                  {user && (user.id === c.author_id || isAdmin) && (
+                    <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(c.id)}>삭제</button>
+                  )}
+                </>
               )}
             </div>
             {repliesOf(c.id).map(r => (
               <div className="comment-item" key={r.id} style={{ marginLeft: 24 }}>
-                <span className="comment-author">↳ {r.authorName}</span>
-                {r.content}
-                {user && (user.id === r.author_id || isAdmin) && (
-                  <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(r.id)}>삭제</button>
+                {editingCommentId === r.id ? (
+                  <form onSubmit={e => saveEditComment(e, r.id)} style={{ display: 'flex', gap: 6 }}>
+                    <input type="text" value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)} style={{ flex: 1 }} />
+                    <button className="btn-primary" type="submit" style={{ width: 'auto' }}>저장</button>
+                    <button type="button" className="btn-secondary" style={{ width: 'auto' }} onClick={cancelEditComment}>취소</button>
+                  </form>
+                ) : (
+                  <>
+                    <span className="comment-author">↳ {r.authorName}</span>
+                    {r.content}
+                    {user && user.id === r.author_id && (
+                      <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditComment(r)}>수정</button>
+                    )}
+                    {user && (user.id === r.author_id || isAdmin) && (
+                      <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(r.id)}>삭제</button>
+                    )}
+                  </>
                 )}
               </div>
             ))}
