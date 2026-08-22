@@ -11,7 +11,7 @@ export default function Header() {
     <header className="site-header">
       <div className="header-top">
         <Link to="/" className="site-title">
-          <h1>📋 간단 게시판</h1>
+          <h1>📋 우리들의 게시판</h1>
         </Link>
         <div className="header-actions">
           <NotificationBell />

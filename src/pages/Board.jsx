@@ -43,6 +43,9 @@ export default function Board() {
   const [color, setColor] = useState(POST_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [newPasskey, setNewPasskey] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [imageError, setImageError] = useState('');
   const [deadline, setDeadline] = useState('');
   const [customPasskey, setCustomPasskey] = useState('');
 
@@ -165,6 +168,30 @@ export default function Board() {
     return categories.find(c => c.id === id)?.name || '';
   }
 
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    setImageError('');
+    if (!file) { setImageFile(null); setImagePreview(null); return; }
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      setImageError('jpg, png, gif, webp 형식만 첨부할 수 있습니다.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError('이미지는 5MB 이하만 첨부할 수 있습니다.');
+      e.target.value = '';
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }
+
+  function removeImage() {
+    setImageFile(null);
+    setImagePreview(null);
+    setImageError('');
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!user) {
@@ -207,19 +234,28 @@ export default function Board() {
         setCustomPasskey('');
         loadPosts();
       } else {
+        let imageUrl = null;
+        if (imageFile) {
+          const path = `${user.id}/${Date.now()}-${imageFile.name}`;
+          const { error: uploadErr } = await supabase.storage.from('post-images').upload(path, imageFile);
+          if (uploadErr) throw uploadErr;
+          imageUrl = supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl;
+        }
         const { error } = await supabase.from('posts').insert({
           category_id: categoryId,
           author_id: user.id,
           title: title.trim(),
           content: content.trim(),
           color,
-          tag
+          tag,
+          image_url: imageUrl
         });
         if (error) throw error;
         localStorage.removeItem(DRAFT_KEY);
         setTitle('');
         setContent('');
         setColor(POST_COLORS[0]);
+        removeImage();
         setShowWriteForm(false);
         loadPosts();
       }
@@ -238,6 +274,7 @@ export default function Board() {
     setColor(POST_COLORS[0]);
     setDeadline('');
     setCustomPasskey('');
+    removeImage();
   }
 
   if (!supabase) {
@@ -297,6 +334,18 @@ export default function Board() {
                       onClick={() => setColor(c)}
                     />
                   ))}
+                </div>
+              )}
+              {!isRollingPaper && (
+                <div className="row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                  <input type="file" aria-label="이미지 첨부" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handleImageSelect} />
+                  {imageError && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{imageError}</div>}
+                  {imagePreview && (
+                    <div style={{ position: 'relative' }}>
+                      <img src={imagePreview} alt="첨부 이미지 미리보기" style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, border: '1px solid var(--border)' }} />
+                      <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={removeImage}>제거</button>
+                    </div>
+                  )}
                 </div>
               )}
               {isRollingPaper && (
@@ -425,6 +474,7 @@ export default function Board() {
                     {post.is_pinned && <span className="post-category pinned">📌 공지</span>}
                     {post.tag && <span className="post-category">{post.tag}</span>}
                     <span className="post-category">{categoryName(post.category_id)}</span>
+                    {post.image_url && <span aria-hidden="true">🖼️</span>}
                     {post.title}
                   </div>
                   <div className="post-meta">{formatDate(post.created_at)} · 조회 {post.view_count}</div>

@@ -191,6 +191,7 @@ create table posts (
   content text not null,
   color text,
   tag text,
+  image_url text,
   view_count integer not null default 0,
   like_count integer not null default 0,
   dislike_count integer not null default 0,
@@ -999,6 +1000,20 @@ select cron.schedule(
 -- 15. 실시간 반영: 게시글이 삭제/등록되면 다른 사용자 화면에도 새로고침 없이 즉시 반영
 -- ------------------------------------------------------------
 alter publication supabase_realtime add table posts;
+
+-- ------------------------------------------------------------
+-- 16. post-images 스토리지 버킷 (게시글 이미지 첨부, 5MB 제한)
+-- ------------------------------------------------------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('post-images', 'post-images', true, 5242880, array['image/jpeg','image/png','image/gif','image/webp'])
+on conflict (id) do update set public = true, file_size_limit = 5242880, allowed_mime_types = array['image/jpeg','image/png','image/gif','image/webp'];
+
+create policy post_images_public_read on storage.objects for select
+  using (bucket_id = 'post-images');
+create policy post_images_active_user_upload on storage.objects for insert
+  with check (bucket_id = 'post-images' and auth.uid() is not null and is_active_user());
+create policy post_images_owner_delete on storage.objects for delete
+  using (bucket_id = 'post-images' and auth.uid() = owner);
 
 -- ============================================================
 -- 마지막 1회: 관리자 지정 (회원가입 후 아래를 직접 실행하세요)

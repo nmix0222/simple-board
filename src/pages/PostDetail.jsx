@@ -28,6 +28,11 @@ export default function PostDetail() {
   const [editContent, setEditContent] = useState('');
   const [editTag, setEditTag] = useState(TAGS[0]);
   const [editColor, setEditColor] = useState(POST_COLORS[0]);
+  const [editImageUrl, setEditImageUrl] = useState(null);
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImagePreview, setEditImagePreview] = useState(null);
+  const [editImageError, setEditImageError] = useState('');
+  const [editImageRemoved, setEditImageRemoved] = useState(false);
 
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -53,6 +58,11 @@ export default function PostDetail() {
     setEditContent(p.content);
     setEditTag(p.tag || TAGS[0]);
     setEditColor(p.color || POST_COLORS[0]);
+    setEditImageUrl(p.image_url || null);
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    setEditImageError('');
+    setEditImageRemoved(false);
 
     const { data: cat } = await supabase.from('categories').select('*').eq('id', p.category_id).single();
     setCategory(cat);
@@ -138,14 +148,46 @@ export default function PostDetail() {
     });
   }
 
+  function handleEditImageSelect(e) {
+    const file = e.target.files?.[0];
+    setEditImageError('');
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      setEditImageError('jpg, png, gif, webp 형식만 첨부할 수 있습니다.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setEditImageError('이미지는 5MB 이하만 첨부할 수 있습니다.');
+      e.target.value = '';
+      return;
+    }
+    setEditImageFile(file);
+    setEditImagePreview(URL.createObjectURL(file));
+    setEditImageRemoved(false);
+  }
+
+  function removeEditImage() {
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    setEditImageRemoved(true);
+  }
+
   async function saveEdit(e) {
     e.preventDefault();
     if (!editTitle.trim() || !editContent.trim()) {
       alert('제목과 내용을 입력해주세요.');
       return;
     }
+    let imageUrl = editImageRemoved ? null : editImageUrl;
+    if (editImageFile) {
+      const path = `${user.id}/${Date.now()}-${editImageFile.name}`;
+      const { error: uploadErr } = await supabase.storage.from('post-images').upload(path, editImageFile);
+      if (uploadErr) { alert(uploadErr.message); return; }
+      imageUrl = supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl;
+    }
     const { error } = await supabase.from('posts').update({
-      title: editTitle.trim(), content: editContent.trim(), tag: editTag, color: editColor
+      title: editTitle.trim(), content: editContent.trim(), tag: editTag, color: editColor, image_url: imageUrl
     }).eq('id', id);
     if (error) { alert(error.message); return; }
     setEditing(false);
@@ -247,6 +289,16 @@ export default function PostDetail() {
               <button key={c} type="button" aria-label={`배경색 ${i + 1}`} aria-pressed={c === editColor} className={`color-swatch${c === editColor ? ' selected' : ''}`} style={{ background: c }} onClick={() => setEditColor(c)} />
             ))}
           </div>
+          <div className="row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+            {!editImageRemoved && (editImagePreview || editImageUrl) && (
+              <div>
+                <img src={editImagePreview || editImageUrl} alt="첨부 이미지" style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8, border: '1px solid var(--border)' }} />
+                <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={removeEditImage}>이미지 제거</button>
+              </div>
+            )}
+            <input type="file" aria-label="이미지 첨부" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handleEditImageSelect} />
+            {editImageError && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{editImageError}</div>}
+          </div>
           <div className="actions" style={{ gap: 8 }}>
             <button type="button" className="btn-secondary" onClick={() => setEditing(false)}>취소</button>
             <button type="submit" className="btn-primary">저장</button>
@@ -278,6 +330,9 @@ export default function PostDetail() {
         <div className="post-meta" style={{ marginBottom: 10 }}>
           <Link to={`/user/${post.author_id}`}>{author?.nickname || '알 수 없음'}</Link> · {formatDate(post.created_at)} · 조회 {post.view_count}
         </div>
+        {post.image_url && (
+          <img src={post.image_url} alt="첨부 이미지" style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 12 }} />
+        )}
         <div className="post-body">{post.content}</div>
         <div className="post-footer">
           <span className="post-author">

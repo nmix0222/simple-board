@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom';
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 
 export default function Privacy() {
-  useDocumentMeta('개인정보처리방침', '간단 게시판이 어떤 정보를 어떻게 수집하고 보관하는지 안내합니다.');
+  useDocumentMeta('개인정보처리방침', '우리들의 게시판이 어떤 정보를 어떻게 수집하고 보관하는지 안내합니다.');
   return (
     <div className="content-page">
       <h2>개인정보처리방침</h2>
-      <p>간단 게시판(이하 "본 사이트")은 이용자의 개인정보를 소중히 다루며, 아래와 같은 방침에 따라 정보를 처리합니다.</p>
+      <p>우리들의 게시판(이하 "본 사이트")은 이용자의 개인정보를 소중히 다루며, 아래와 같은 방침에 따라 정보를 처리합니다.</p>
 
       <h2>1. 수집하는 정보</h2>
       <ul>

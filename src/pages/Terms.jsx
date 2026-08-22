@@ -1,13 +1,13 @@
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 
 export default function Terms() {
-  useDocumentMeta('이용약관', '간단 게시판 서비스 이용 조건 및 절차를 안내합니다.');
+  useDocumentMeta('이용약관', '우리들의 게시판 서비스 이용 조건 및 절차를 안내합니다.');
   return (
     <div className="content-page">
       <h2>이용약관</h2>
 
       <h2>제1조 (목적)</h2>
-      <p>이 약관은 간단 게시판(이하 "본 사이트")이 제공하는 서비스의 이용 조건 및 절차를 규정함을 목적으로 합니다.</p>
+      <p>이 약관은 우리들의 게시판(이하 "본 사이트")이 제공하는 서비스의 이용 조건 및 절차를 규정함을 목적으로 합니다.</p>
 
       <h2>제2조 (서비스의 내용)</h2>
       <p>

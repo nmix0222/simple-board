@@ -4,7 +4,7 @@ import { formatDateTime } from '../lib/format.js';
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 
 export default function Notices() {
-  useDocumentMeta('공지사항', '간단 게시판의 운영 공지사항을 확인하세요.');
+  useDocumentMeta('공지사항', '우리들의 게시판의 운영 공지사항을 확인하세요.');
   const [notices, setNotices] = useState(null);
   const [search, setSearch] = useState('');
 
