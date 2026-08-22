@@ -200,19 +200,27 @@ language sql security definer set search_path = public, extensions as $$
 $$;
 grant execute on function increment_post_view(uuid) to anon, authenticated;
 
--- 금칙어 + 등록 속도 제한(20초, 관리자는 예외) + URL 도배 방지
+-- 금칙어 + 등록 속도 제한(20초, 관리자는 예외) + 동일 내용 반복 방지 + URL 도배 방지
 create function enforce_post_content_rules() returns trigger
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_recent_count integer;
   v_bad_word text;
   v_url_count integer;
+  v_last_content text;
 begin
   if tg_op = 'INSERT' and not is_admin() then
     select count(*) into v_recent_count from posts
       where author_id = new.author_id and created_at > now() - interval '20 seconds';
     if v_recent_count > 0 then
       raise exception '너무 빠르게 게시글을 등록했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+
+    select content into v_last_content from posts
+      where author_id = new.author_id
+      order by created_at desc limit 1;
+    if v_last_content is not null and v_last_content = new.content then
+      raise exception '바로 전에 작성한 글과 내용이 동일합니다.';
     end if;
   end if;
 
@@ -293,18 +301,26 @@ create policy comments_insert_own on comments for insert with check (auth.uid() 
 create policy comments_update_own_or_admin on comments for update using (author_id = auth.uid() or is_admin());
 create policy comments_delete_admin_only on comments for delete using (is_admin());
 
--- 금칙어 + 등록 속도 제한(5초, 관리자는 예외)
+-- 금칙어 + 등록 속도 제한(5초, 관리자는 예외) + 동일 내용 반복 방지
 create function enforce_comment_content_rules() returns trigger
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_recent_count integer;
   v_bad_word text;
+  v_last_content text;
 begin
   if tg_op = 'INSERT' and not is_admin() then
     select count(*) into v_recent_count from comments
       where author_id = new.author_id and created_at > now() - interval '5 seconds';
     if v_recent_count > 0 then
       raise exception '너무 빠르게 댓글을 등록했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+
+    select content into v_last_content from comments
+      where author_id = new.author_id
+      order by created_at desc limit 1;
+    if v_last_content is not null and v_last_content = new.content then
+      raise exception '바로 전에 작성한 댓글과 내용이 동일합니다.';
     end if;
   end if;
 

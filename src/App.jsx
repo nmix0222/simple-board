@@ -18,6 +18,7 @@ import SignIn from './pages/SignIn.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import UpdatePassword from './pages/UpdatePassword.jsx';
 import ProfilePage from './pages/ProfilePage.jsx';
+import NotFound from './pages/NotFound.jsx';
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <Footer />

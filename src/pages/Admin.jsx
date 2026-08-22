@@ -16,7 +16,7 @@ const LOG_ACTION_LABELS = {
   create_notice: '공지 등록', delete_notice: '공지 삭제', add_banned_word: '금칙어 추가',
   delete_banned_word: '금칙어 삭제', unrestrict_user: '이용제한 해제',
   report_deferred: '신고 검토중 처리', report_keep_content: '신고 콘텐츠 유지', report_delete_content: '신고 콘텐츠 삭제',
-  report_dismiss: '신고 기각'
+  report_dismiss: '신고 기각', create_category: '카테고리 추가', delete_category: '카테고리 삭제'
 };
 
 export default function Admin() {
@@ -35,6 +35,9 @@ export default function Admin() {
   const [newBannedWord, setNewBannedWord] = useState('');
   const [logs, setLogs] = useState([]);
   const [logAdminNames, setLogAdminNames] = useState({});
+  const [categories, setCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategorySlug, setNewCategorySlug] = useState('');
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -54,6 +57,8 @@ export default function Admin() {
       loadBannedWords();
     } else if (tab === 'logs') {
       loadLogs();
+    } else if (tab === 'categories') {
+      loadCategories();
     }
   }, [isAdmin, tab]);
 
@@ -95,6 +100,41 @@ export default function Admin() {
       const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', adminIds);
       setLogAdminNames(Object.fromEntries((profs || []).map(p => [p.id, p.nickname])));
     }
+  }
+
+  async function loadCategories() {
+    const { data } = await supabase.from('categories').select('*').order('sort_order');
+    setCategories(data || []);
+  }
+
+  async function addCategory(e) {
+    e.preventDefault();
+    const name = newCategoryName.trim();
+    const slug = newCategorySlug.trim();
+    if (!name || !slug) return;
+    const nextOrder = categories.length ? Math.max(...categories.map(c => c.sort_order)) + 1 : 1;
+    const { data, error } = await supabase.from('categories').insert({ name, slug, sort_order: nextOrder }).select().single();
+    if (error) {
+      alert(error.message.includes('duplicate') ? '이미 존재하는 이름 또는 slug입니다.' : error.message);
+      return;
+    }
+    await logAdmin('create_category', 'category', data.id, { name, slug });
+    setNewCategoryName('');
+    setNewCategorySlug('');
+    loadCategories();
+  }
+
+  async function deleteCategory(cat) {
+    const { count } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('category_id', cat.id);
+    if (count > 0) {
+      alert(`"${cat.name}" 카테고리에 게시글이 ${count}개 있어 삭제할 수 없습니다. 게시글을 먼저 다른 카테고리로 옮기거나 삭제해주세요.`);
+      return;
+    }
+    if (!confirm(`"${cat.name}" 카테고리를 삭제하시겠습니까?`)) return;
+    const { error } = await supabase.from('categories').delete().eq('id', cat.id);
+    if (error) { alert(error.message); return; }
+    await logAdmin('delete_category', 'category', cat.id, { name: cat.name });
+    loadCategories();
   }
 
   async function logAdmin(action, targetType, targetId, detail) {
@@ -224,6 +264,7 @@ export default function Admin() {
         <button type="button" className={`tab${tab === 'reports' ? ' active' : ''}`} onClick={() => setTab('reports')}>신고 관리</button>
         <button type="button" className={`tab${tab === 'members' ? ' active' : ''}`} onClick={() => setTab('members')}>회원 관리</button>
         <button type="button" className={`tab${tab === 'notices' ? ' active' : ''}`} onClick={() => setTab('notices')}>공지사항 관리</button>
+        <button type="button" className={`tab${tab === 'categories' ? ' active' : ''}`} onClick={() => setTab('categories')}>카테고리 관리</button>
         <button type="button" className={`tab${tab === 'banned' ? ' active' : ''}`} onClick={() => setTab('banned')}>금칙어 관리</button>
         <button type="button" className={`tab${tab === 'logs' ? ' active' : ''}`} onClick={() => setTab('logs')}>관리자 로그</button>
       </div>
@@ -360,6 +401,31 @@ export default function Admin() {
               <div className="post-footer">
                 <span />
                 <button type="button" className="btn-delete" onClick={() => deleteNotice(n.id)}>삭제</button>
+              </div>
+            </article>
+          ))}
+        </>
+      )}
+
+      {tab === 'categories' && (
+        <>
+          <section className="write-box">
+            <h2>새 카테고리</h2>
+            <form onSubmit={addCategory}>
+              <div className="row"><input type="text" placeholder="이름 (예: 유머)" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} /></div>
+              <div className="row"><input type="text" placeholder="slug (예: humor, 영문/숫자/하이픈)" value={newCategorySlug} onChange={e => setNewCategorySlug(e.target.value)} /></div>
+              <div className="actions"><button className="btn-primary" type="submit">추가</button></div>
+            </form>
+          </section>
+          {categories.length === 0 ? <div className="empty">카테고리가 없습니다.</div> : categories.map(c => (
+            <article className="post" key={c.id}>
+              <div className="post-top">
+                <div className="post-title">{c.name}</div>
+                <div className="post-meta">{c.slug}</div>
+              </div>
+              <div className="post-footer">
+                <span />
+                <button type="button" className="btn-delete" onClick={() => deleteCategory(c)}>삭제</button>
               </div>
             </article>
           ))}
