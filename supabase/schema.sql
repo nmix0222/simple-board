@@ -315,7 +315,10 @@ create table rolling_papers (
 
 alter table rolling_papers enable row level security;
 -- 테이블 자체는 RLS로 막고, 안전한 뷰로만 조회 (passkey_hash 노출 방지)
-create policy rolling_papers_no_direct_select on rolling_papers for select using (false);
+-- SELECT를 완전히 막으면(false) Postgres가 UPDATE/DELETE 시 "이 행이 내 것인지"조차
+-- 확인할 수 없어 본인 소유 행의 수정/삭제까지 함께 막혀버린다. 그래서 본인/관리자에게는
+-- 원본 테이블(패스키 해시 포함) 조회를 허용하고, 일반 공개 조회는 rolling_papers_public 뷰로만 한다.
+create policy rolling_papers_select_own_or_admin on rolling_papers for select using (creator_id = auth.uid() or is_admin());
 create policy rolling_papers_insert_own on rolling_papers for insert with check (auth.uid() is not null and creator_id = auth.uid());
 create policy rolling_papers_update_own_or_admin on rolling_papers for update using (creator_id = auth.uid() or is_admin());
 create policy rolling_papers_delete_admin_only on rolling_papers for delete using (is_admin());
@@ -390,7 +393,8 @@ create table rolling_paper_messages (
 );
 
 alter table rolling_paper_messages enable row level security;
-create policy messages_no_direct_select on rolling_paper_messages for select using (false);
+-- 같은 이유로 own/admin에게는 원본 조회를 허용하고, 공개 조회는 rolling_paper_messages_public 뷰로.
+create policy messages_select_own_or_admin on rolling_paper_messages for select using (author_id = auth.uid() or is_admin());
 create policy messages_update_own_or_admin on rolling_paper_messages for update using (author_id = auth.uid() or is_admin());
 create policy messages_delete_admin_only on rolling_paper_messages for delete using (is_admin());
 -- insert는 아래 post_rolling_paper_message() 함수를 통해서만 (passkey 검증 필요하므로 직접 insert 금지)
