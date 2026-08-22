@@ -33,6 +33,7 @@ drop function if exists is_active_user() cascade;
 drop function if exists handle_new_user() cascade;
 drop function if exists prevent_role_self_elevation() cascade;
 drop function if exists protect_post_moderation_fields() cascade;
+drop function if exists protect_comment_moderation_fields() cascade;
 drop function if exists increment_post_view(uuid) cascade;
 drop function if exists bump_post_comment_count() cascade;
 drop function if exists bump_post_like_count() cascade;
@@ -248,6 +249,7 @@ begin
     new.like_count := old.like_count;
     new.dislike_count := old.dislike_count;
     new.comment_count := old.comment_count;
+    new.is_flagged := old.is_flagged;
     if new.is_deleted and not old.is_deleted then
       -- 일반 사용자의 삭제는 허용(자기 글 소프트 삭제), 그 외 is_deleted 되돌리기는 금지
     elsif new.is_deleted <> old.is_deleted then
@@ -372,6 +374,29 @@ create trigger comments_after_insert
 create trigger comments_after_soft_delete
   after update on comments
   for each row execute function bump_post_comment_count();
+
+-- 작성자는 content만 고칠 수 있고, is_flagged/like_count/삭제 복구는 관리자 또는 전용 함수로만 변경
+-- (posts엔 이미 있던 보호가 comments엔 빠져 있어서, 신고로 숨겨진 자기 댓글을 본인이 직접 다시 노출시킬 수 있었다)
+create function protect_comment_moderation_fields() returns trigger
+language plpgsql as $$
+begin
+  if not is_admin() then
+    new.like_count := old.like_count;
+    new.is_flagged := old.is_flagged;
+    if new.is_deleted and not old.is_deleted then
+      -- 본인 댓글 소프트 삭제는 허용
+    elsif new.is_deleted <> old.is_deleted then
+      new.is_deleted := old.is_deleted;
+    end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger comments_protect_fields
+  before update on comments
+  for each row execute function protect_comment_moderation_fields();
 
 alter table comments enable row level security;
 create policy comments_select_public on comments for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
@@ -1052,6 +1077,12 @@ begin
   if not is_admin() then
     raise exception '관리자만 사용할 수 있습니다';
   end if;
+  if p_user_id = auth.uid() then
+    raise exception '자기 자신에게는 제재를 내릴 수 없습니다';
+  end if;
+  if exists (select 1 from profiles where id = p_user_id and role = 'admin') then
+    raise exception '다른 관리자에게는 제재를 내릴 수 없습니다';
+  end if;
   insert into user_restrictions (user_id, admin_id, type, reason, expires_at)
   values (p_user_id, auth.uid(), p_type, p_reason, p_expires_at);
   if p_type = 'suspension' then
@@ -1124,6 +1155,12 @@ select cron.schedule(
   'cleanup-passkey-attempts',
   '0 * * * *',
   $cron$ delete from rolling_paper_verify_attempts where created_at < now() - interval '1 hour'; $cron$
+);
+-- 읽은 알림은 30일 지나면 정리 (안 읽은 알림은 계속 보이도록 남겨둠)
+select cron.schedule(
+  'cleanup-old-notifications',
+  '0 3 * * *',
+  $cron$ delete from notifications where is_read and created_at < now() - interval '30 days'; $cron$
 );
 
 -- ------------------------------------------------------------

@@ -78,9 +78,11 @@ export default function NotificationBell() {
 
   async function openNotification(n) {
     if (!n.is_read) {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', n.id);
-      setItems(items.map(i => i.id === n.id ? { ...i, is_read: true } : i));
-      setUnreadCount(c => Math.max(c - 1, 0));
+      const { error: err } = await supabase.from('notifications').update({ is_read: true }).eq('id', n.id);
+      if (!err) {
+        setItems(items.map(i => i.id === n.id ? { ...i, is_read: true } : i));
+        setUnreadCount(c => Math.max(c - 1, 0));
+      }
     }
     setOpen(false);
     navigate(targetLink(n));
@@ -88,7 +90,8 @@ export default function NotificationBell() {
 
   async function markAllRead() {
     if (!user) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
+    const { error: err } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
+    if (err) return;
     setItems(items.map(i => ({ ...i, is_read: true })));
     setUnreadCount(0);
   }

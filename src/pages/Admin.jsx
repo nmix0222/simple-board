@@ -146,8 +146,9 @@ export default function Admin() {
   async function createNotice(e) {
     e.preventDefault();
     if (!noticeTitle.trim() || !noticeContent.trim()) return;
-    const { data } = await supabase.from('notices').insert({ author_id: user.id, title: noticeTitle.trim(), content: noticeContent.trim() }).select().single();
-    if (data) await logAdmin('create_notice', 'notice', data.id, { title: data.title });
+    const { data, error: err } = await supabase.from('notices').insert({ author_id: user.id, title: noticeTitle.trim(), content: noticeContent.trim() }).select().single();
+    if (err) { alert('등록에 실패했습니다: ' + err.message); return; }
+    await logAdmin('create_notice', 'notice', data.id, { title: data.title });
     setNoticeTitle('');
     setNoticeContent('');
     loadNotices();
@@ -155,19 +156,22 @@ export default function Admin() {
 
   async function deleteNotice(id) {
     if (!confirm('공지사항을 삭제하시겠습니까?')) return;
-    await supabase.from('notices').delete().eq('id', id);
+    const { error: err } = await supabase.from('notices').delete().eq('id', id);
+    if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
     await logAdmin('delete_notice', 'notice', id);
     loadNotices();
   }
 
   async function toggleNoticePin(notice) {
-    await supabase.from('notices').update({ is_pinned: !notice.is_pinned }).eq('id', notice.id);
+    const { error: err } = await supabase.from('notices').update({ is_pinned: !notice.is_pinned }).eq('id', notice.id);
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     await logAdmin('toggle_notice_pin', 'notice', notice.id, { is_pinned: !notice.is_pinned });
     setNotices(notices.map(n => n.id === notice.id ? { ...n, is_pinned: !n.is_pinned } : n));
   }
 
   async function togglePin(post) {
-    await supabase.from('posts').update({ is_pinned: !post.is_pinned }).eq('id', post.id);
+    const { error: err } = await supabase.from('posts').update({ is_pinned: !post.is_pinned }).eq('id', post.id);
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     await logAdmin('toggle_pin', 'post', post.id, { is_pinned: !post.is_pinned });
     setPosts(posts.map(p => p.id === post.id ? { ...p, is_pinned: !p.is_pinned } : p));
   }
@@ -178,24 +182,32 @@ export default function Admin() {
       if (typed !== null) alert('제목이 일치하지 않아 삭제가 취소되었습니다.');
       return;
     }
-    await supabase.from('posts').delete().eq('id', post.id);
+    const { error: err } = await supabase.from('posts').delete().eq('id', post.id);
+    if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
     await logAdmin('hard_delete_post', 'post', post.id, { title: post.title });
     setPosts(posts.filter(p => p.id !== post.id));
   }
 
   async function deleteComment(comment) {
     if (!confirm('댓글을 완전히 삭제하시겠습니까?')) return;
-    await supabase.from('comments').delete().eq('id', comment.id);
+    const { error: err } = await supabase.from('comments').delete().eq('id', comment.id);
+    if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
     await logAdmin('delete_comment', 'comment', comment.id, { content: comment.content?.slice(0, 100) });
     setComments(comments.filter(c => c.id !== comment.id));
   }
 
   async function logAction(report, status, action) {
-    await supabase.from('reports').update({ status }).eq('id', report.id);
+    const { error: err } = await supabase.from('reports').update({ status }).eq('id', report.id);
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     await supabase.from('report_actions').insert({ report_id: report.id, admin_id: user.id, action });
     if ((action === 'keep_content' || action === 'dismiss') && (report.target_type === 'post' || report.target_type === 'comment')) {
       const table = report.target_type === 'post' ? 'posts' : 'comments';
-      await supabase.from(table).update({ is_flagged: false }).eq('id', report.target_id);
+      // 다른 신고가 아직 대기/검토중이면 계속 숨겨둔다 — 이번 신고 하나만 기각/유지한다고 바로 다시 노출시키지 않는다.
+      const { count } = await supabase.from('reports').select('id', { count: 'exact', head: true })
+        .eq('target_type', report.target_type).eq('target_id', report.target_id).in('status', ['pending', 'reviewing']);
+      if (!count) {
+        await supabase.from(table).update({ is_flagged: false }).eq('id', report.target_id);
+      }
     }
     await logAdmin('report_' + action, report.target_type, report.target_id, { report_id: report.id, reason: report.reason });
     setReports(reports.map(r => r.id === report.id ? { ...r, status } : r));
@@ -204,7 +216,10 @@ export default function Admin() {
   async function deleteReportedContent(report) {
     if (!confirm('신고된 콘텐츠를 삭제하시겠습니까?')) return;
     const table = { post: 'posts', comment: 'comments', rolling_paper: 'rolling_papers', rolling_paper_message: 'rolling_paper_messages' }[report.target_type];
-    if (table) await supabase.from(table).delete().eq('id', report.target_id);
+    if (table) {
+      const { error: err } = await supabase.from(table).delete().eq('id', report.target_id);
+      if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
+    }
     await logAction(report, 'resolved', 'delete_content');
   }
 
@@ -232,20 +247,23 @@ export default function Admin() {
   async function warnMember(member) {
     const reason = prompt(`${member.nickname}님에게 경고를 남깁니다. 사유를 입력해주세요.`);
     if (!reason || !reason.trim()) return;
-    await supabase.rpc('restrict_user', { p_user_id: member.id, p_type: 'warning', p_reason: reason.trim() });
+    const { error: err } = await supabase.rpc('restrict_user', { p_user_id: member.id, p_type: 'warning', p_reason: reason.trim() });
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     alert('경고를 등록했습니다.');
   }
 
   async function suspendMember(member) {
     const reason = prompt(`${member.nickname}님을 이용정지합니다. 사유를 입력해주세요.`);
     if (!reason || !reason.trim()) return;
-    await supabase.rpc('restrict_user', { p_user_id: member.id, p_type: 'suspension', p_reason: reason.trim() });
+    const { error: err } = await supabase.rpc('restrict_user', { p_user_id: member.id, p_type: 'suspension', p_reason: reason.trim() });
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     setMembers(members.map(m => m.id === member.id ? { ...m, status: 'restricted' } : m));
   }
 
   async function unsuspendMember(member) {
     if (!confirm(`${member.nickname}님의 이용정지를 해제하시겠습니까?`)) return;
-    await supabase.rpc('unrestrict_user', { p_user_id: member.id });
+    const { error: err } = await supabase.rpc('unrestrict_user', { p_user_id: member.id });
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     setMembers(members.map(m => m.id === member.id ? { ...m, status: 'active' } : m));
   }
 
