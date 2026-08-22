@@ -52,6 +52,10 @@ export default function RollingPaperDetail() {
   const [editDescription, setEditDescription] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [showQr, setShowQr] = useState(false);
+  const [openReplyId, setOpenReplyId] = useState(null);
+  const [replyName, setReplyName] = useState('');
+  const [replyText, setReplyText] = useState('');
+  const [replyAnonymous, setReplyAnonymous] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -125,6 +129,26 @@ export default function RollingPaperDetail() {
       .order('created_at', { ascending: true });
     const rows = data || [];
     const authorIds = [...new Set(rows.map(m => m.author_id).filter(Boolean))];
+
+    let commentsByMessage = {};
+    if (rows.length) {
+      const { data: comments } = await supabase
+        .from('rolling_paper_message_comments_public')
+        .select('*')
+        .in('message_id', rows.map(m => m.id))
+        .order('created_at', { ascending: true });
+      const commentAuthorIds = [...new Set((comments || []).map(c => c.author_id).filter(Boolean))];
+      let commentNameMap = {};
+      if (commentAuthorIds.length) {
+        const { data: cProfs } = await supabase.from('profiles').select('id, nickname').in('id', commentAuthorIds);
+        commentNameMap = Object.fromEntries((cProfs || []).map(p => [p.id, p.nickname]));
+      }
+      for (const c of comments || []) {
+        const name = c.is_anonymous ? '익명' : (c.display_name || commentNameMap[c.author_id] || '알 수 없음');
+        (commentsByMessage[c.message_id] ||= []).push({ ...c, authorName: name });
+      }
+    }
+
     let nameMap = {};
     if (authorIds.length) {
       const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', authorIds);
@@ -132,8 +156,26 @@ export default function RollingPaperDetail() {
     }
     setMessages(rows.map(m => ({
       ...m,
-      authorName: m.is_anonymous ? '익명' : (m.display_name || nameMap[m.author_id] || '알 수 없음')
+      authorName: m.is_anonymous ? '익명' : (m.display_name || nameMap[m.author_id] || '알 수 없음'),
+      comments: commentsByMessage[m.id] || []
     })));
+  }
+
+  async function submitReply(e, messageId) {
+    e.preventDefault();
+    if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (!replyAnonymous && !replyName.trim()) { alert('이름을 입력해주세요.'); return; }
+    if (!replyText.trim()) { alert('답장 내용을 입력해주세요.'); return; }
+    const { error: err } = await supabase.from('rolling_paper_message_comments').insert({
+      message_id: messageId,
+      author_id: user.id,
+      display_name: replyAnonymous ? null : replyName.trim(),
+      is_anonymous: replyAnonymous,
+      content: replyText.trim()
+    });
+    if (err) { alert(err.message); return; }
+    setReplyText('');
+    loadMessages();
   }
 
   async function handleUnlock(e) {
@@ -336,10 +378,57 @@ export default function RollingPaperDetail() {
                   {isGraduation && <span className="pin-dot" aria-hidden="true">📌</span>}
                   <div className="message-author">{m.authorName}</div>
                   <div className="message-content">{m.content}</div>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    style={{ marginTop: 6, fontSize: 11, color: 'inherit', opacity: 0.75 }}
+                    onClick={() => setOpenReplyId(openReplyId === m.id ? null : m.id)}
+                  >
+                    💬 답장 {m.comments.length}
+                  </button>
                 </div>
               ))
             )}
           </div>
+
+          {openReplyId && messages && (() => {
+            const target = messages.find(m => m.id === openReplyId);
+            if (!target) return null;
+            return (
+              <div className="comment-section" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginTop: 14 }}>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
+                  <strong style={{ color: 'var(--text)' }}>{target.authorName}</strong>님의 메시지에 답장
+                </div>
+                {target.comments.length === 0 ? (
+                  <div className="comment-loading">아직 답장이 없습니다.</div>
+                ) : (
+                  target.comments.map((c, i) => (
+                    <div className="comment-item" key={i}>
+                      <span className="comment-author">{c.authorName}</span>
+                      {c.content}
+                    </div>
+                  ))
+                )}
+                <form onSubmit={e => submitReply(e, openReplyId)} style={{ marginTop: 10 }}>
+                  {!replyAnonymous && (
+                    <div className="row">
+                      <input type="text" placeholder="이름 (예: 김민수 선생님)" value={replyName} onChange={e => setReplyName(e.target.value)} style={{ maxWidth: 200 }} />
+                    </div>
+                  )}
+                  <div className="row">
+                    <input type="text" placeholder="답장을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
+                  </div>
+                  <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+                    <input type="checkbox" checked={replyAnonymous} onChange={e => setReplyAnonymous(e.target.checked)} style={{ width: 'auto' }} />
+                    익명으로 답장하기
+                  </label>
+                  <div className="actions">
+                    <button className="btn-primary" type="submit">답장 보내기</button>
+                  </div>
+                </form>
+              </div>
+            );
+          })()}
         </>
       )}
       {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{error}</div>}

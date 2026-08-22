@@ -6,6 +6,7 @@
 -- 현재 이 프로젝트에는 실제 사용자 데이터가 없는 것으로 확인했습니다.
 -- ============================================================
 
+drop view if exists rolling_paper_message_comments_public cascade;
 drop view if exists rolling_paper_messages_public cascade;
 drop view if exists rolling_papers_public cascade;
 drop table if exists admin_activity_logs cascade;
@@ -13,6 +14,7 @@ drop table if exists user_restrictions cascade;
 drop table if exists notices cascade;
 drop table if exists report_actions cascade;
 drop table if exists reports cascade;
+drop table if exists rolling_paper_message_comments cascade;
 drop table if exists rolling_paper_reactions cascade;
 drop table if exists rolling_paper_messages cascade;
 drop table if exists rolling_papers cascade;
@@ -466,6 +468,33 @@ alter table rolling_paper_reactions enable row level security;
 create policy reactions_select_all on rolling_paper_reactions for select using (true);
 create policy reactions_insert_own on rolling_paper_reactions for insert with check (auth.uid() = user_id);
 create policy reactions_delete_own on rolling_paper_reactions for delete using (auth.uid() = user_id);
+
+-- ------------------------------------------------------------
+-- 8b. rolling_paper_message_comments (주로 선생님이 학생 메시지에 답장하는 용도)
+-- ------------------------------------------------------------
+create table rolling_paper_message_comments (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references rolling_paper_messages(id) on delete cascade,
+  author_id uuid not null references profiles(id) on delete cascade,
+  display_name text,
+  is_anonymous boolean not null default false,
+  content text not null,
+  is_deleted boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table rolling_paper_message_comments enable row level security;
+create policy rpmc_select_own_or_admin on rolling_paper_message_comments for select using (author_id = auth.uid() or is_admin());
+create policy rpmc_insert_own on rolling_paper_message_comments for insert with check (auth.uid() is not null and author_id = auth.uid());
+create policy rpmc_delete_own_or_admin on rolling_paper_message_comments for delete using (author_id = auth.uid() or is_admin());
+
+create view rolling_paper_message_comments_public as
+  select c.id, c.message_id,
+         case when c.is_anonymous then null else c.author_id end as author_id,
+         c.display_name, c.content, c.is_anonymous, c.is_deleted, c.created_at
+  from rolling_paper_message_comments c
+  where not c.is_deleted;
+
+grant select on rolling_paper_message_comments_public to anon, authenticated;
 
 -- ------------------------------------------------------------
 -- 9. reports
