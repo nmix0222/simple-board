@@ -231,7 +231,7 @@ create trigger posts_protect_fields
 alter table posts enable row level security;
 create policy posts_select_public on posts for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
 create policy posts_insert_own on posts for insert with check (auth.uid() is not null and author_id = auth.uid() and is_active_user());
-create policy posts_update_own_or_admin on posts for update using (author_id = auth.uid() or is_admin());
+create policy posts_update_own_or_admin on posts for update using ((author_id = auth.uid() and is_active_user()) or is_admin());
 create policy posts_delete_admin_only on posts for delete using (is_admin());
 
 -- 조회수 증가 (누구나, 세션당 1회는 클라이언트에서 제어)
@@ -341,7 +341,7 @@ create trigger comments_after_soft_delete
 alter table comments enable row level security;
 create policy comments_select_public on comments for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
 create policy comments_insert_own on comments for insert with check (auth.uid() is not null and author_id = auth.uid() and is_active_user());
-create policy comments_update_own_or_admin on comments for update using (author_id = auth.uid() or is_admin());
+create policy comments_update_own_or_admin on comments for update using ((author_id = auth.uid() and is_active_user()) or is_admin());
 create policy comments_delete_admin_only on comments for delete using (is_admin());
 
 -- 금칙어 + 등록 속도 제한(5초, 관리자는 예외) + 동일 내용 반복 방지
@@ -529,7 +529,7 @@ alter table rolling_papers enable row level security;
 -- 원본 테이블(패스키 해시 포함) 조회를 허용하고, 일반 공개 조회는 rolling_papers_public 뷰로만 한다.
 create policy rolling_papers_select_own_or_admin on rolling_papers for select using (creator_id = auth.uid() or is_admin());
 create policy rolling_papers_insert_own on rolling_papers for insert with check (auth.uid() is not null and creator_id = auth.uid() and is_active_user());
-create policy rolling_papers_update_own_or_admin on rolling_papers for update using (creator_id = auth.uid() or is_admin());
+create policy rolling_papers_update_own_or_admin on rolling_papers for update using ((creator_id = auth.uid() and is_active_user()) or is_admin());
 create policy rolling_papers_delete_admin_only on rolling_papers for delete using (is_admin());
 
 create view rolling_papers_public as
@@ -610,7 +610,7 @@ create table rolling_paper_messages (
 alter table rolling_paper_messages enable row level security;
 -- 같은 이유로 own/admin에게는 원본 조회를 허용하고, 공개 조회는 rolling_paper_messages_public 뷰로.
 create policy messages_select_own_or_admin on rolling_paper_messages for select using (author_id = auth.uid() or is_admin());
-create policy messages_update_own_or_admin on rolling_paper_messages for update using (author_id = auth.uid() or is_admin());
+create policy messages_update_own_or_admin on rolling_paper_messages for update using ((author_id = auth.uid() and is_active_user()) or is_admin());
 create policy messages_delete_admin_only on rolling_paper_messages for delete using (is_admin());
 -- insert는 아래 post_rolling_paper_message() 함수를 통해서만 (passkey 검증 필요하므로 직접 insert 금지)
 create policy messages_no_direct_insert on rolling_paper_messages for insert with check (false);
@@ -765,7 +765,7 @@ create table rolling_paper_message_comments (
 alter table rolling_paper_message_comments enable row level security;
 create policy rpmc_select_own_or_admin on rolling_paper_message_comments for select using (author_id = auth.uid() or is_admin());
 create policy rpmc_insert_own on rolling_paper_message_comments for insert with check (auth.uid() is not null and author_id = auth.uid() and is_active_user());
-create policy rpmc_update_own on rolling_paper_message_comments for update using (author_id = auth.uid());
+create policy rpmc_update_own on rolling_paper_message_comments for update using (author_id = auth.uid() and is_active_user());
 create policy rpmc_delete_own_or_admin on rolling_paper_message_comments for delete using (author_id = auth.uid() or is_admin());
 
 -- 답장 등록/수정 시 금칙어 검사 (지금까지 이 테이블엔 내용 검증이 전혀 없었다)
