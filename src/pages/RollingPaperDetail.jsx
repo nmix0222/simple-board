@@ -247,6 +247,7 @@ export default function RollingPaperDetail() {
     if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
     if (isAdmin) {
       await supabase.from('rolling_paper_messages').delete().eq('id', messageId);
+      await supabase.rpc('log_admin_action', { p_action: 'hard_delete_rolling_paper_message', p_target_type: 'rolling_paper_message', p_target_id: messageId });
     } else {
       await supabase.from('rolling_paper_messages').update({ is_deleted: true }).eq('id', messageId);
     }
@@ -272,9 +273,12 @@ export default function RollingPaperDetail() {
     loadMessages();
   }
 
-  async function deleteReply(replyId) {
+  async function deleteReply(replyId, authorId) {
     if (!confirm('답장을 삭제하시겠습니까?')) return;
     await supabase.from('rolling_paper_message_comments').delete().eq('id', replyId);
+    if (isAdmin && user && authorId !== user.id) {
+      await supabase.rpc('log_admin_action', { p_action: 'delete_rolling_paper_message_reply', p_target_type: 'rolling_paper_message', p_target_id: replyId });
+    }
     loadMessages();
   }
 
@@ -309,13 +313,19 @@ export default function RollingPaperDetail() {
   }
 
   async function handleDeletePaper() {
-    if (!confirm('이 롤링페이퍼를 삭제하시겠습니까?')) return;
-    const { error: err } = isAdmin
-      ? await supabase.from('rolling_papers').delete().eq('id', id)
-      : await supabase.from('rolling_papers').update({ is_deleted: true }).eq('id', id);
-    if (err) {
-      alert('삭제에 실패했습니다: ' + err.message);
-      return;
+    if (isAdmin) {
+      const typed = prompt(`이 작업은 되돌릴 수 없고 안에 남겨진 메시지도 전부 함께 사라집니다.\n완전히 삭제하려면 제목을 그대로 입력해주세요: "${paper.title}"`);
+      if (typed !== paper.title) {
+        if (typed !== null) alert('제목이 일치하지 않아 삭제가 취소되었습니다.');
+        return;
+      }
+      const { error: err } = await supabase.from('rolling_papers').delete().eq('id', id);
+      if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
+      await supabase.rpc('log_admin_action', { p_action: 'hard_delete_rolling_paper', p_target_type: 'rolling_paper', p_target_id: id, p_detail: { title: paper.title } });
+    } else {
+      if (!confirm('이 롤링페이퍼를 삭제하시겠습니까?')) return;
+      const { error: err } = await supabase.from('rolling_papers').update({ is_deleted: true }).eq('id', id);
+      if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
     }
     navigate('/');
   }
@@ -584,7 +594,7 @@ export default function RollingPaperDetail() {
                             <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditReply(c)}>수정</button>
                           )}
                           {user && (user.id === c.author_id || isAdmin) && (
-                            <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteReply(c.id)}>삭제</button>
+                            <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteReply(c.id, c.author_id)}>삭제</button>
                           )}
                         </>
                       )}

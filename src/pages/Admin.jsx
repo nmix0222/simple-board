@@ -17,7 +17,8 @@ const LOG_ACTION_LABELS = {
   delete_banned_word: '금칙어 삭제', unrestrict_user: '이용제한 해제',
   report_deferred: '신고 검토중 처리', report_keep_content: '신고 콘텐츠 유지', report_delete_content: '신고 콘텐츠 삭제',
   report_dismiss: '신고 기각', create_category: '카테고리 추가', delete_category: '카테고리 삭제',
-  toggle_notice_pin: '공지 고정 변경'
+  toggle_notice_pin: '공지 고정 변경', hard_delete_rolling_paper: '롤링페이퍼 완전삭제',
+  hard_delete_rolling_paper_message: '롤링페이퍼 메시지 완전삭제', delete_rolling_paper_message_reply: '롤링페이퍼 답장 삭제'
 };
 
 export default function Admin() {
