@@ -28,6 +28,7 @@ drop table if exists posts cascade;
 drop table if exists categories cascade;
 drop table if exists profiles cascade;
 drop function if exists is_admin() cascade;
+drop function if exists is_active_user() cascade;
 drop function if exists handle_new_user() cascade;
 drop function if exists prevent_role_self_elevation() cascade;
 drop function if exists protect_post_moderation_fields() cascade;
@@ -74,6 +75,15 @@ create function is_admin() returns boolean
 language sql stable as $$
   select exists (
     select 1 from profiles where id = auth.uid() and role = 'admin' and status = 'active'
+  );
+$$;
+
+-- status가 active인 사용자만 새 콘텐츠(글/댓글/롤링페이퍼)를 만들 수 있다.
+-- 관리자가 이용정지/탈퇴 처리해도 이 검사가 없으면 그냥 재로그인해서 계속 쓸 수 있으므로 필수.
+create function is_active_user() returns boolean
+language sql stable as $$
+  select exists (
+    select 1 from profiles where id = auth.uid() and status = 'active'
   );
 $$;
 
@@ -220,7 +230,7 @@ create trigger posts_protect_fields
 
 alter table posts enable row level security;
 create policy posts_select_public on posts for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
-create policy posts_insert_own on posts for insert with check (auth.uid() is not null and author_id = auth.uid());
+create policy posts_insert_own on posts for insert with check (auth.uid() is not null and author_id = auth.uid() and is_active_user());
 create policy posts_update_own_or_admin on posts for update using (author_id = auth.uid() or is_admin());
 create policy posts_delete_admin_only on posts for delete using (is_admin());
 
@@ -330,7 +340,7 @@ create trigger comments_after_soft_delete
 
 alter table comments enable row level security;
 create policy comments_select_public on comments for select using ((not is_deleted and not is_flagged) or is_admin() or author_id = auth.uid());
-create policy comments_insert_own on comments for insert with check (auth.uid() is not null and author_id = auth.uid());
+create policy comments_insert_own on comments for insert with check (auth.uid() is not null and author_id = auth.uid() and is_active_user());
 create policy comments_update_own_or_admin on comments for update using (author_id = auth.uid() or is_admin());
 create policy comments_delete_admin_only on comments for delete using (is_admin());
 
@@ -518,7 +528,7 @@ alter table rolling_papers enable row level security;
 -- 확인할 수 없어 본인 소유 행의 수정/삭제까지 함께 막혀버린다. 그래서 본인/관리자에게는
 -- 원본 테이블(패스키 해시 포함) 조회를 허용하고, 일반 공개 조회는 rolling_papers_public 뷰로만 한다.
 create policy rolling_papers_select_own_or_admin on rolling_papers for select using (creator_id = auth.uid() or is_admin());
-create policy rolling_papers_insert_own on rolling_papers for insert with check (auth.uid() is not null and creator_id = auth.uid());
+create policy rolling_papers_insert_own on rolling_papers for insert with check (auth.uid() is not null and creator_id = auth.uid() and is_active_user());
 create policy rolling_papers_update_own_or_admin on rolling_papers for update using (creator_id = auth.uid() or is_admin());
 create policy rolling_papers_delete_admin_only on rolling_papers for delete using (is_admin());
 
@@ -542,6 +552,9 @@ declare
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다';
+  end if;
+  if not is_active_user() then
+    raise exception '이용이 제한된 계정입니다';
   end if;
   insert into rolling_papers (creator_id, category_id, title, target_subject, description, visibility, passkey_hash, allow_anonymous, deadline)
   values (
@@ -687,6 +700,9 @@ begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다';
   end if;
+  if not is_active_user() then
+    raise exception '이용이 제한된 계정입니다';
+  end if;
 
   select * into v_paper from rolling_papers where id = p_paper_id and not is_deleted;
   if not found then
@@ -748,7 +764,7 @@ create table rolling_paper_message_comments (
 );
 alter table rolling_paper_message_comments enable row level security;
 create policy rpmc_select_own_or_admin on rolling_paper_message_comments for select using (author_id = auth.uid() or is_admin());
-create policy rpmc_insert_own on rolling_paper_message_comments for insert with check (auth.uid() is not null and author_id = auth.uid());
+create policy rpmc_insert_own on rolling_paper_message_comments for insert with check (auth.uid() is not null and author_id = auth.uid() and is_active_user());
 create policy rpmc_update_own on rolling_paper_message_comments for update using (author_id = auth.uid());
 create policy rpmc_delete_own_or_admin on rolling_paper_message_comments for delete using (author_id = auth.uid() or is_admin());
 

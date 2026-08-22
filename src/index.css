@@ -423,6 +423,19 @@ button {
   font-size: 18px;
   filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
 }
+.restriction-banner {
+  max-width: 720px;
+  margin: 12px auto 0;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--card));
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+}
+.restriction-banner a { color: var(--danger); text-decoration: underline; }
+
 .hub-picker { display: flex; flex-direction: column; gap: 10px; }
 .hub-link-card {
   display: flex;

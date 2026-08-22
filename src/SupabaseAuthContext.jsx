@@ -53,8 +53,15 @@ export function SupabaseAuthProvider({ children }) {
   }
 
   async function signIn({ email, password }) {
-    const { error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(email), password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(email), password });
     if (error) throw error;
+    // 탈퇴한 계정은 비밀번호가 맞아도 로그인 상태를 유지시키지 않는다 — role/status는 여전히
+    // DB(RLS)가 실제로 검증하지만, 탈퇴 계정이 그냥 재로그인해서 아무 일 없었다는 듯 쓰는 걸 막는다.
+    const { data: prof } = await supabase.from('profiles').select('status').eq('id', data.user.id).single();
+    if (prof?.status === 'withdrawn') {
+      await supabase.auth.signOut();
+      throw new Error('탈퇴한 계정입니다.');
+    }
   }
 
   async function signOut() {
@@ -90,6 +97,7 @@ export function SupabaseAuthProvider({ children }) {
     user: session?.user || null,
     profile,
     isAdmin: profile?.role === 'admin',
+    isRestricted: profile?.status === 'restricted',
     loading: session === undefined,
     signUp,
     signIn,

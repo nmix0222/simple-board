@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import WelcomeGate from './components/WelcomeGate.jsx';
+import RestrictionBanner from './components/RestrictionBanner.jsx';
 import Board from './pages/Board.jsx';
 
 const PostDetail = lazy(() => import('./pages/PostDetail.jsx'));
@@ -27,6 +28,7 @@ export default function App() {
     <>
       <Header />
       <WelcomeGate />
+      <RestrictionBanner />
       <main>
         <Suspense fallback={<div className="empty">불러오는 중...</div>}>
           <Routes>
