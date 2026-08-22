@@ -44,6 +44,8 @@ drop function if exists post_rolling_paper_message(uuid, text, boolean, text) ca
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text, text) cascade;
 drop function if exists enforce_post_content_rules() cascade;
 drop function if exists enforce_comment_content_rules() cascade;
+drop function if exists enforce_rolling_paper_content_rules() cascade;
+drop function if exists enforce_profile_content_rules() cascade;
 drop function if exists log_admin_action(text, text, uuid, jsonb) cascade;
 drop function if exists restrict_user(uuid, text, text, timestamptz) cascade;
 drop function if exists handle_banned_word_violation(text) cascade;
@@ -121,6 +123,34 @@ create trigger profiles_protect_role
 alter table profiles enable row level security;
 create policy profiles_select_all on profiles for select using (true);
 create policy profiles_update_own on profiles for update using (auth.uid() = id or is_admin());
+
+-- 닉네임 변경: 이용정지 계정은 못 바꾸게 막고, 닉네임에도 금칙어 검사를 적용한다.
+-- 가입 시(INSERT) 최초 닉네임에도 금칙어 검사는 동일하게 적용하되, 이용정지 여부 검사는 변경(UPDATE)에만 건다.
+create function enforce_profile_content_rules() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_bad_word text;
+begin
+  if tg_op = 'UPDATE' and new.nickname is not distinct from old.nickname then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and not is_admin() and not is_active_user() then
+    raise exception '이용이 제한된 계정은 닉네임을 변경할 수 없습니다';
+  end if;
+
+  select word into v_bad_word from banned_words where new.nickname ilike '%' || word || '%' limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 등록할 수 없습니다.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger profiles_enforce_content
+  before insert or update on profiles
+  for each row execute function enforce_profile_content_rules();
 
 -- ------------------------------------------------------------
 -- 1b. notifications (내 글에 댓글, 내 댓글에 답글, 내 롤링페이퍼에 메시지/답장이 오면 알림)
@@ -584,6 +614,27 @@ end;
 $$;
 grant execute on function create_rolling_paper(text, uuid, text, text, text, text, boolean, timestamptz) to authenticated;
 
+-- 롤링페이퍼 title/description 금칙어 검사 (posts/comments엔 있었지만 이 테이블엔 없었음)
+create function enforce_rolling_paper_content_rules() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_bad_word text;
+begin
+  select word into v_bad_word from banned_words
+    where new.title ilike '%' || word || '%'
+       or (new.description is not null and new.description ilike '%' || word || '%')
+    limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 등록할 수 없습니다.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger rolling_papers_enforce_rules
+  before insert or update of title, description on rolling_papers
+  for each row execute function enforce_rolling_paper_content_rules();
+
 -- 패스키 무차별 대입(brute force) 방지: 같은 롤링페이퍼에 1분에 10번 넘게 시도하면 잠시 막는다.
 -- 로그인 없이도 시도 가능하므로(익명 접근 허용) 사용자 단위가 아니라 페이퍼 단위로 제한한다.
 create table rolling_paper_verify_attempts (
@@ -807,12 +858,21 @@ create policy rpmc_insert_own on rolling_paper_message_comments for insert with 
 create policy rpmc_update_own on rolling_paper_message_comments for update using (author_id = auth.uid() and is_active_user());
 create policy rpmc_delete_own_or_admin on rolling_paper_message_comments for delete using (author_id = auth.uid() or is_admin());
 
--- 답장 등록/수정 시 금칙어 검사 (지금까지 이 테이블엔 내용 검증이 전혀 없었다)
+-- 답장 등록/수정 시 금칙어 검사 + 등록 속도 제한(5초, 관리자는 예외) — 지금까지 이 테이블엔 내용 검증이 전혀 없었다
 create function enforce_message_comment_content_rules() returns trigger
 language plpgsql security definer set search_path = public, extensions as $$
 declare
+  v_recent_count integer;
   v_bad_word text;
 begin
+  if tg_op = 'INSERT' and not is_admin() then
+    select count(*) into v_recent_count from rolling_paper_message_comments
+      where author_id = new.author_id and created_at > now() - interval '5 seconds';
+    if v_recent_count > 0 then
+      raise exception '너무 빠르게 답장을 등록했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+  end if;
+
   select word into v_bad_word from banned_words where new.content ilike '%' || word || '%' limit 1;
   if v_bad_word is not null then
     raise exception '금칙어가 포함되어 있어 등록할 수 없습니다.';

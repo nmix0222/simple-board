@@ -214,6 +214,7 @@ export default function Board() {
     }
 
     setSubmitting(true);
+    let uploadedImagePath = null;
     try {
       if (isRollingPaper) {
         const passkey = customPasskey.trim() ? customPasskey.trim().toUpperCase() : generatePasskey();
@@ -240,6 +241,7 @@ export default function Board() {
           const path = `${user.id}/${Date.now()}-${imageFile.name}`;
           const { error: uploadErr } = await supabase.storage.from('post-images').upload(path, imageFile);
           if (uploadErr) throw uploadErr;
+          uploadedImagePath = path;
           imageUrl = supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl;
         }
         const { error } = await supabase.from('posts').insert({
@@ -252,6 +254,7 @@ export default function Board() {
           image_url: imageUrl
         });
         if (error) throw error;
+        uploadedImagePath = null;
         localStorage.removeItem(DRAFT_KEY);
         setTitle('');
         setContent('');
@@ -261,6 +264,7 @@ export default function Board() {
         loadPosts();
       }
     } catch (err) {
+      if (uploadedImagePath) await supabase.storage.from('post-images').remove([uploadedImagePath]);
       if (isBannedWordError(err)) {
         const msg = await reportBannedWordViolation(supabase, `${title} ${content}`);
         alert(msg);

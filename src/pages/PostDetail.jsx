@@ -118,27 +118,28 @@ export default function PostDetail() {
 
   async function handleVote(value) {
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    let err;
     if (myVote === value) {
-      await supabase.from('post_likes').delete().eq('post_id', id).eq('user_id', user.id);
-      setMyVote(0);
+      ({ error: err } = await supabase.from('post_likes').delete().eq('post_id', id).eq('user_id', user.id));
+      if (!err) setMyVote(0);
     } else if (myVote === 0) {
-      await supabase.from('post_likes').insert({ post_id: id, user_id: user.id, value });
-      setMyVote(value);
+      ({ error: err } = await supabase.from('post_likes').insert({ post_id: id, user_id: user.id, value }));
+      if (!err) setMyVote(value);
     } else {
-      await supabase.from('post_likes').update({ value }).eq('post_id', id).eq('user_id', user.id);
-      setMyVote(value);
+      ({ error: err } = await supabase.from('post_likes').update({ value }).eq('post_id', id).eq('user_id', user.id));
+      if (!err) setMyVote(value);
     }
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     const { data: p } = await supabase.from('posts').select('like_count, dislike_count').eq('id', id).single();
     if (p) setPost(prev => ({ ...prev, ...p }));
   }
 
   async function handleBookmark() {
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
-    if (bookmarked) {
-      await supabase.from('post_bookmarks').delete().eq('post_id', id).eq('user_id', user.id);
-    } else {
-      await supabase.from('post_bookmarks').insert({ post_id: id, user_id: user.id });
-    }
+    const { error: err } = bookmarked
+      ? await supabase.from('post_bookmarks').delete().eq('post_id', id).eq('user_id', user.id)
+      : await supabase.from('post_bookmarks').insert({ post_id: id, user_id: user.id });
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     setBookmarked(!bookmarked);
   }
 
@@ -188,16 +189,19 @@ export default function PostDetail() {
     }
     const oldImageUrl = post.image_url;
     let imageUrl = editImageRemoved ? null : editImageUrl;
+    let newUploadedPath = null;
     if (editImageFile) {
       const path = `${user.id}/${Date.now()}-${editImageFile.name}`;
       const { error: uploadErr } = await supabase.storage.from('post-images').upload(path, editImageFile);
       if (uploadErr) { alert(uploadErr.message); return; }
+      newUploadedPath = path;
       imageUrl = supabase.storage.from('post-images').getPublicUrl(path).data.publicUrl;
     }
     const { error } = await supabase.from('posts').update({
       title: editTitle.trim(), content: editContent.trim(), tag: editTag, color: editColor, image_url: imageUrl
     }).eq('id', id);
     if (error) {
+      if (newUploadedPath) await supabase.storage.from('post-images').remove([newUploadedPath]);
       if (isBannedWordError(error)) alert(await reportBannedWordViolation(supabase, `${editTitle} ${editContent}`));
       else alert(error.message);
       return;
@@ -219,11 +223,13 @@ export default function PostDetail() {
         if (typed !== null) alert('제목이 일치하지 않아 삭제가 취소되었습니다.');
         return;
       }
-      await supabase.from('posts').delete().eq('id', id);
+      const { error: delErr } = await supabase.from('posts').delete().eq('id', id);
+      if (delErr) { alert('삭제에 실패했습니다: ' + delErr.message); return; }
       await supabase.rpc('log_admin_action', { p_action: 'hard_delete_post', p_target_type: 'post', p_target_id: id, p_detail: { title: post.title } });
     } else {
       if (!confirm('이 글을 삭제하시겠습니까?')) return;
-      await supabase.from('posts').update({ is_deleted: true }).eq('id', id);
+      const { error: delErr } = await supabase.from('posts').update({ is_deleted: true }).eq('id', id);
+      if (delErr) { alert('삭제에 실패했습니다: ' + delErr.message); return; }
     }
     navigate('/');
   }
@@ -283,11 +289,10 @@ export default function PostDetail() {
 
   async function toggleCommentLike(commentId, currentlyLiked) {
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
-    if (currentlyLiked) {
-      await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id);
-    } else {
-      await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
-    }
+    const { error: err } = currentlyLiked
+      ? await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id)
+      : await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
+    if (err) { alert('처리에 실패했습니다: ' + err.message); return; }
     setComments(comments.map(c => c.id === commentId
       ? { ...c, likedByMe: !currentlyLiked, like_count: c.like_count + (currentlyLiked ? -1 : 1) }
       : c));

@@ -299,7 +299,11 @@ export default function RollingPaperDetail() {
   async function handleUnlock(e) {
     e.preventDefault();
     setError('');
-    const { data } = await supabase.rpc('verify_rolling_paper_passkey', { p_paper_id: id, p_passkey: passkeyInput.trim().toUpperCase() });
+    const { data, error: err } = await supabase.rpc('verify_rolling_paper_passkey', { p_paper_id: id, p_passkey: passkeyInput.trim().toUpperCase() });
+    if (err) {
+      setError(err.message || '확인에 실패했습니다.');
+      return;
+    }
     if (!data) {
       setError('패스키가 올바르지 않습니다.');
       return;

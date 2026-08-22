@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import { formatDate } from '../lib/format.js';
+import { isBannedWordError, reportBannedWordViolation } from '../lib/bannedWordPenalty.js';
 
 // 회원가입 시 "아이디"를 내부적으로 가짜 이메일(아이디@id.simple-board.local)로 저장하므로,
 // 화면에는 원래 아이디만 보여준다. 관리자 계정처럼 실제 이메일로 가입한 경우엔 그대로 보여준다.
@@ -85,7 +86,15 @@ export default function ProfilePage() {
       await updateNickname(nickname.trim());
       setMessage('닉네임이 변경되었습니다.');
     } catch (err) {
-      setError(err.message?.includes('duplicate') ? '이미 사용 중인 닉네임입니다.' : (err.message || '변경 실패'));
+      if (isBannedWordError(err)) {
+        setError(await reportBannedWordViolation(supabase, nickname.trim()));
+      } else if (err.message?.includes('duplicate')) {
+        setError('이미 사용 중인 닉네임입니다.');
+      } else if (err.message?.includes('이용이 제한된')) {
+        setError('이용이 제한된 계정은 닉네임을 변경할 수 없습니다.');
+      } else {
+        setError(err.message || '변경 실패');
+      }
     }
   }
 
