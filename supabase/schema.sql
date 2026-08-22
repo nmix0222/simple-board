@@ -16,6 +16,7 @@ drop table if exists reports cascade;
 drop table if exists rolling_paper_reactions cascade;
 drop table if exists rolling_paper_messages cascade;
 drop table if exists rolling_papers cascade;
+drop table if exists post_bookmarks cascade;
 drop table if exists post_likes cascade;
 drop table if exists comments cascade;
 drop table if exists posts cascade;
@@ -28,6 +29,7 @@ drop function if exists protect_post_moderation_fields() cascade;
 drop function if exists increment_post_view(uuid) cascade;
 drop function if exists bump_post_comment_count() cascade;
 drop function if exists bump_post_like_count() cascade;
+drop function if exists bump_post_vote_counts() cascade;
 drop function if exists create_rolling_paper(text, uuid, text, text, text, text, boolean, timestamptz) cascade;
 drop function if exists verify_rolling_paper_passkey(uuid, text) cascade;
 drop function if exists can_access_rolling_paper(uuid) cascade;
@@ -125,8 +127,10 @@ create table posts (
   title text not null,
   content text not null,
   color text,
+  tag text,
   view_count integer not null default 0,
   like_count integer not null default 0,
+  dislike_count integer not null default 0,
   comment_count integer not null default 0,
   is_pinned boolean not null default false,
   is_deleted boolean not null default false,
@@ -135,7 +139,7 @@ create table posts (
 );
 create index posts_category_idx on posts(category_id, created_at desc);
 
--- 작성자는 title/content/category/color만 고칠 수 있고, pin/삭제/카운터는 관리자 또는 전용 함수로만 변경
+-- 작성자는 title/content/category/color/tag만 고칠 수 있고, pin/삭제/카운터는 관리자 또는 전용 함수로만 변경
 create function protect_post_moderation_fields() returns trigger
 language plpgsql as $$
 begin
@@ -143,6 +147,7 @@ begin
     new.is_pinned := old.is_pinned;
     new.view_count := old.view_count;
     new.like_count := old.like_count;
+    new.dislike_count := old.dislike_count;
     new.comment_count := old.comment_count;
     if new.is_deleted and not old.is_deleted then
       -- 일반 사용자의 삭제는 허용(자기 글 소프트 삭제), 그 외 is_deleted 되돌리기는 금지
@@ -178,6 +183,7 @@ grant execute on function increment_post_view(uuid) to anon, authenticated;
 create table comments (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references posts(id) on delete cascade,
+  parent_id uuid references comments(id) on delete cascade,
   author_id uuid not null references profiles(id) on delete cascade,
   content text not null,
   is_deleted boolean not null default false,
@@ -185,6 +191,22 @@ create table comments (
   updated_at timestamptz not null default now()
 );
 create index comments_post_idx on comments(post_id, created_at asc);
+
+-- 답글은 1단계까지만 허용 (답글에 또 답글 금지 — 대부분의 게시판과 동일한 깊이)
+create function enforce_comment_depth() returns trigger
+language plpgsql as $$
+begin
+  if new.parent_id is not null and exists (
+    select 1 from comments where id = new.parent_id and parent_id is not null
+  ) then
+    raise exception '답글에는 답글을 달 수 없습니다';
+  end if;
+  return new;
+end;
+$$;
+create trigger comments_enforce_depth
+  before insert on comments
+  for each row execute function enforce_comment_depth();
 
 create function bump_post_comment_count() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -212,35 +234,62 @@ create policy comments_update_own_or_admin on comments for update using (author_
 create policy comments_delete_admin_only on comments for delete using (is_admin());
 
 -- ------------------------------------------------------------
--- 5. post_likes
+-- 5. post_likes (추천/비추천 — value: 1=추천, -1=비추천)
 -- ------------------------------------------------------------
 create table post_likes (
   post_id uuid not null references posts(id) on delete cascade,
   user_id uuid not null references profiles(id) on delete cascade,
+  value smallint not null check (value in (1, -1)),
   created_at timestamptz not null default now(),
   primary key (post_id, user_id)
 );
 
-create function bump_post_like_count() returns trigger
+create function bump_post_vote_counts() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
-    update posts set like_count = like_count + 1 where id = new.post_id;
+    update posts set
+      like_count = like_count + (case when new.value = 1 then 1 else 0 end),
+      dislike_count = dislike_count + (case when new.value = -1 then 1 else 0 end)
+    where id = new.post_id;
   elsif tg_op = 'DELETE' then
-    update posts set like_count = greatest(like_count - 1, 0) where id = old.post_id;
+    update posts set
+      like_count = greatest(like_count - (case when old.value = 1 then 1 else 0 end), 0),
+      dislike_count = greatest(dislike_count - (case when old.value = -1 then 1 else 0 end), 0)
+    where id = old.post_id;
+  elsif tg_op = 'UPDATE' and new.value <> old.value then
+    update posts set
+      like_count = greatest(like_count + (case when new.value = 1 then 1 when old.value = 1 then -1 else 0 end), 0),
+      dislike_count = greatest(dislike_count + (case when new.value = -1 then 1 when old.value = -1 then -1 else 0 end), 0)
+    where id = new.post_id;
   end if;
   return null;
 end;
 $$;
 
 create trigger post_likes_after_change
-  after insert or delete on post_likes
-  for each row execute function bump_post_like_count();
+  after insert or update or delete on post_likes
+  for each row execute function bump_post_vote_counts();
 
 alter table post_likes enable row level security;
 create policy post_likes_select_all on post_likes for select using (true);
 create policy post_likes_insert_own on post_likes for insert with check (auth.uid() = user_id);
+create policy post_likes_update_own on post_likes for update using (auth.uid() = user_id);
 create policy post_likes_delete_own on post_likes for delete using (auth.uid() = user_id);
+
+-- ------------------------------------------------------------
+-- 5b. post_bookmarks (스크랩)
+-- ------------------------------------------------------------
+create table post_bookmarks (
+  post_id uuid not null references posts(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (post_id, user_id)
+);
+alter table post_bookmarks enable row level security;
+create policy bookmarks_select_own on post_bookmarks for select using (auth.uid() = user_id);
+create policy bookmarks_insert_own on post_bookmarks for insert with check (auth.uid() = user_id);
+create policy bookmarks_delete_own on post_bookmarks for delete using (auth.uid() = user_id);
 
 -- ------------------------------------------------------------
 -- 6. rolling_papers (passkey_hash는 뷰에서 절대 노출하지 않음)

@@ -1,74 +1,127 @@
 import { useEffect, useState } from 'react';
-import {
-  collection, addDoc, doc, updateDoc, increment,
-  query, orderBy, onSnapshot, serverTimestamp
-} from 'firebase/firestore';
-import { db } from '../firebase.js';
-import { sha256Hex, generatePasskey } from '../hash.js';
+import { Link } from 'react-router-dom';
+import { supabase } from '../supabaseClient.js';
+import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
+import { generatePasskey } from '../hash.js';
 import AdSlot from '../components/AdSlot.jsx';
-import PostCard from '../components/PostCard.jsx';
-import RollingPaperCard from '../components/RollingPaperCard.jsx';
 
-const CATEGORIES = ['자유', '연예인', '개그', '유머', '스포츠', '게임', '영화/드라마', '음악', 'IT', '질문', '롤링페이퍼'];
+const TAGS = ['일반', '질문', '정보', '잡담', '유머'];
 const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
+const ROLLING_PAPER = 'ROLLING_PAPER';
+const DRAFT_KEY = 'post-draft';
 
-const PAGE_SIZE = 20;
+function formatDate(ts) {
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function excerpt(text, len = 80) {
+  if (!text) return '';
+  return text.length > len ? text.slice(0, len) + '…' : text;
+}
 
 export default function Board() {
+  const { user } = useSupabaseAuth();
+  const [categories, setCategories] = useState([]);
   const [posts, setPosts] = useState([]);
-  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [papers, setPapers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState('전체');
-  const [author, setAuthor] = useState('');
-  const [password, setPassword] = useState('');
+  const [search, setSearch] = useState('');
+  const [sortMode, setSortMode] = useState('latest');
+  const [visibleCount, setVisibleCount] = useState(20);
+
+  const [showWriteForm, setShowWriteForm] = useState(false);
+  const [categoryId, setCategoryId] = useState('');
+  const [tag, setTag] = useState(TAGS[0]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [color, setColor] = useState(POST_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [newPasskey, setNewPasskey] = useState(null);
-  const [showWriteForm, setShowWriteForm] = useState(false);
-  const [search, setSearch] = useState('');
-  const [sortMode, setSortMode] = useState('latest');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const isRollingPaper = category === '롤링페이퍼';
+  const isRollingPaper = categoryId === ROLLING_PAPER;
 
   useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, snapshot => {
-      setPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => !p.deleted));
+    if (!supabase) return;
+    supabase.from('categories').select('*').order('sort_order').then(({ data }) => {
+      setCategories(data || []);
+      if (data && data.length) setCategoryId(data[0].id);
     });
-    return unsub;
   }, []);
 
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [currentTab, search, sortMode]);
+    if (!supabase) return;
+    loadPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTab, sortMode]);
 
-  function reactionTotal(post) {
-    return Object.values(post.reactions || {}).reduce((sum, n) => sum + n, 0);
+  // 임시저장 불러오기 (글쓰기 창을 처음 열 때)
+  useEffect(() => {
+    if (!showWriteForm) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (saved && saved.title) {
+        setTitle(saved.title);
+        setContent(saved.content || '');
+      }
+    } catch (e) { /* ignore */ }
+  }, [showWriteForm]);
+
+  // 임시저장 (제목/내용이 바뀔 때마다)
+  useEffect(() => {
+    if (!showWriteForm || isRollingPaper) return;
+    const t = setTimeout(() => {
+      if (title.trim() || content.trim()) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content }));
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [title, content, showWriteForm, isRollingPaper]);
+
+  async function loadPosts() {
+    setLoading(true);
+    if (currentTab === '롤링페이퍼') {
+      const { data, error } = await supabase.from('rolling_papers_public').select('*').order('created_at', { ascending: false });
+      if (!error) setPapers(data || []);
+      setLoading(false);
+      return;
+    }
+    let query = supabase.from('posts').select('*').eq('is_deleted', false);
+    if (currentTab !== '전체') {
+      const cat = categories.find(c => c.name === currentTab);
+      if (cat) query = query.eq('category_id', cat.id);
+    }
+    query = sortMode === 'popular'
+      ? query.order('is_pinned', { ascending: false }).order('like_count', { ascending: false })
+      : query.order('is_pinned', { ascending: false }).order('created_at', { ascending: false });
+    const { data, error } = await query.limit(200);
+    if (!error) setPosts(data || []);
+    setLoading(false);
   }
 
-  const filtered = (currentTab === '전체' ? posts : posts.filter(p => p.category === currentTab))
-    .filter(p => {
-      if (!search.trim()) return true;
-      const q = search.trim().toLowerCase();
-      return (p.title || '').toLowerCase().includes(q) || (p.content || '').toLowerCase().includes(q);
-    });
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (!!b.pinned !== !!a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
-    if (sortMode === 'popular') {
-      const score = (post) => reactionTotal(post) * 3 + (post.views || 0) + (post.commentCount || 0) * 2;
-      const diff = score(b) - score(a);
-      if (diff !== 0) return diff;
-    }
-    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+  const filtered = posts.filter(p => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q);
+  });
+  const visiblePosts = filtered.slice(0, visibleCount);
+  const filteredPapers = papers.filter(p => {
+    if (!search.trim()) return true;
+    return p.title.toLowerCase().includes(search.trim().toLowerCase());
   });
 
-  const visiblePosts = sorted.slice(0, visibleCount);
+  function categoryName(id) {
+    return categories.find(c => c.id === id)?.name || '';
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!user) {
+      alert('로그인 후 이용해주세요.');
+      return;
+    }
     if (!title.trim()) {
       alert('제목을 입력해주세요.');
       return;
@@ -77,45 +130,42 @@ export default function Board() {
       alert('내용을 입력해주세요.');
       return;
     }
-    if (password.trim().length < 4) {
-      alert('수정/삭제를 위한 비밀번호를 4자리 이상 입력해주세요.');
-      return;
-    }
 
     setSubmitting(true);
     try {
-      const passwordHash = await sha256Hex(password.trim());
       if (isRollingPaper) {
         const passkey = generatePasskey();
-        const passkeyHash = await sha256Hex(passkey);
-        await addDoc(collection(db, 'posts'), {
-          category,
-          author: author.trim(),
-          passwordHash,
-          title: title.trim(),
-          content: '',
-          passkeyHash,
-          createdAt: serverTimestamp()
+        const { error } = await supabase.rpc('create_rolling_paper', {
+          p_title: title.trim(),
+          p_category_id: null,
+          p_target_subject: null,
+          p_description: content.trim() || null,
+          p_visibility: 'passkey',
+          p_passkey: passkey,
+          p_allow_anonymous: true,
+          p_deadline: null
         });
+        if (error) throw error;
         setNewPasskey(passkey);
       } else {
-        await addDoc(collection(db, 'posts'), {
-          category,
-          author: author.trim(),
-          passwordHash,
+        const { error } = await supabase.from('posts').insert({
+          category_id: categoryId,
+          author_id: user.id,
           title: title.trim(),
           content: content.trim(),
           color,
-          reactions: {},
-          commentCount: 0,
-          createdAt: serverTimestamp()
+          tag
         });
+        if (error) throw error;
+        localStorage.removeItem(DRAFT_KEY);
+        setTitle('');
+        setContent('');
+        setColor(POST_COLORS[0]);
+        setShowWriteForm(false);
+        loadPosts();
       }
-      setTitle('');
-      setContent('');
-      setPassword('');
-      setColor(POST_COLORS[0]);
-      if (!isRollingPaper) setShowWriteForm(false);
+    } catch (err) {
+      alert(err.message || '등록에 실패했습니다.');
     } finally {
       setSubmitting(false);
     }
@@ -126,15 +176,13 @@ export default function Board() {
     setNewPasskey(null);
   }
 
-  async function handleReact(id, emoji) {
-    await updateDoc(doc(db, 'posts', id), { [`reactions.${emoji}`]: increment(1) });
+  if (!supabase) {
+    return <div className="empty">Supabase 설정이 완료되지 않았습니다.</div>;
   }
 
   return (
     <>
-      <button type="button" className="fab" onClick={() => setShowWriteForm(true)} title="글쓰기">
-        +
-      </button>
+      <button type="button" className="fab" onClick={() => setShowWriteForm(true)} title="글쓰기">+</button>
 
       {showWriteForm && (
         <div className="modal-overlay" onClick={closeWriteForm}>
@@ -144,65 +192,58 @@ export default function Board() {
               <button type="button" className="modal-close" onClick={closeWriteForm}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
-          <div className="row">
-            <select value={category} onChange={e => setCategory(e.target.value)}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input
-              type="text"
-              placeholder="이름"
-              style={{ maxWidth: 120 }}
-              value={author}
-              onChange={e => setAuthor(e.target.value)}
-            />
-          </div>
-          <div className="row">
-            <input
-              type="text"
-              placeholder={isRollingPaper ? '롤링페이퍼 제목 (예: OOO를 위한 롤링페이퍼)' : '제목'}
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-            />
-          </div>
-          {!isRollingPaper && (
-            <>
+              <div className="row">
+                <select value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value={ROLLING_PAPER}>롤링페이퍼</option>
+                </select>
+                {!isRollingPaper && (
+                  <select value={tag} onChange={e => setTag(e.target.value)} style={{ maxWidth: 110 }}>
+                    {TAGS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="row">
+                <input
+                  type="text"
+                  placeholder={isRollingPaper ? '롤링페이퍼 제목 (예: OOO를 위한 롤링페이퍼)' : '제목'}
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                />
+              </div>
               <div className="row">
                 <textarea
-                  placeholder="내용을 입력하세요"
+                  placeholder={isRollingPaper ? '소개글 (선택)' : '내용을 입력하세요'}
                   value={content}
                   onChange={e => setContent(e.target.value)}
                 />
               </div>
-              <div className="row color-picker">
-                {POST_COLORS.map(c => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`color-swatch${c === color ? ' selected' : ''}`}
-                    style={{ background: c }}
-                    title="글 색상"
-                    onClick={() => setColor(c)}
-                  />
-                ))}
+              {!isRollingPaper && (
+                <div className="row color-picker">
+                  {POST_COLORS.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`color-swatch${c === color ? ' selected' : ''}`}
+                      style={{ background: c }}
+                      onClick={() => setColor(c)}
+                    />
+                  ))}
+                </div>
+              )}
+              {isRollingPaper && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
+                  등록하면 6자리 패스키가 발급됩니다. 이 패스키를 아는 사람만 메시지를 남길 수 있어요.
+                </p>
+              )}
+              {!user && (
+                <p style={{ fontSize: 12, color: 'var(--danger)', margin: '4px 2px 8px' }}>
+                  로그인 후 작성할 수 있습니다.
+                </p>
+              )}
+              <div className="actions">
+                <button className="btn-primary" type="submit" disabled={submitting || !user}>등록</button>
               </div>
-            </>
-          )}
-          <div className="row">
-            <input
-              type="password"
-              placeholder="비밀번호 (수정/삭제 시 필요, 4자리 이상)"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-            />
-          </div>
-          {isRollingPaper && (
-            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
-              등록하면 6자리 패스키가 발급됩니다. 이 패스키를 아는 사람만 롤링페이퍼에 들어와 메시지를 남길 수 있어요.
-            </p>
-          )}
-          <div className="actions">
-            <button className="btn-primary" type="submit" disabled={submitting}>등록</button>
-          </div>
             </form>
 
             {newPasskey && (
@@ -222,65 +263,86 @@ export default function Board() {
       <AdSlot />
 
       <div className="tabs">
-        {['전체', ...CATEGORIES].map(c => (
-          <button
-            key={c}
-            type="button"
-            className={`tab${c === currentTab ? ' active' : ''}`}
-            onClick={() => setCurrentTab(c)}
-          >
-            {c}
+        <button type="button" className={`tab${currentTab === '전체' ? ' active' : ''}`} onClick={() => setCurrentTab('전체')}>전체</button>
+        {categories.map(c => (
+          <button key={c.id} type="button" className={`tab${currentTab === c.name ? ' active' : ''}`} onClick={() => setCurrentTab(c.name)}>
+            {c.name}
           </button>
         ))}
+        <button type="button" className={`tab${currentTab === '롤링페이퍼' ? ' active' : ''}`} onClick={() => setCurrentTab('롤링페이퍼')}>롤링페이퍼</button>
       </div>
 
       <div className="row">
-        <input
-          type="text"
-          placeholder="제목, 내용 검색"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <input type="text" placeholder="제목, 내용 검색" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div className="list-header">
-        <span>{filtered.length}개의 글</span>
-        <div className="sort-toggle">
-          <button
-            type="button"
-            className={sortMode === 'latest' ? 'active' : ''}
-            onClick={() => setSortMode('latest')}
-          >
-            최신순
-          </button>
-          <button
-            type="button"
-            className={sortMode === 'popular' ? 'active' : ''}
-            onClick={() => setSortMode('popular')}
-          >
-            인기순
-          </button>
+      {currentTab !== '롤링페이퍼' && (
+        <div className="list-header">
+          <span>{filtered.length}개의 글</span>
+          <div className="sort-toggle">
+            <button type="button" className={sortMode === 'latest' ? 'active' : ''} onClick={() => setSortMode('latest')}>최신순</button>
+            <button type="button" className={sortMode === 'popular' ? 'active' : ''} onClick={() => setSortMode('popular')}>인기순</button>
+          </div>
         </div>
-      </div>
+      )}
 
       <section>
-        {sorted.length === 0 ? (
+        {loading ? (
+          <div className="empty">불러오는 중...</div>
+        ) : currentTab === '롤링페이퍼' ? (
+          filteredPapers.length === 0 ? (
+            <div className="empty">아직 만들어진 롤링페이퍼가 없습니다.</div>
+          ) : (
+            filteredPapers.map(paper => (
+              <Link to={`/paper/${paper.id}`} key={paper.id} style={{ display: 'block' }}>
+                <article className="post">
+                  <div className="post-top">
+                    <div className="post-title">
+                      <span className="post-category">🔒 롤링페이퍼</span>
+                      {paper.title}
+                    </div>
+                    <div className="post-meta">{formatDate(paper.created_at)}</div>
+                  </div>
+                  {paper.description && <div className="post-body">{excerpt(paper.description)}</div>}
+                  {paper.deadline && (
+                    <div className="post-footer"><span className="post-author">마감 {formatDate(paper.deadline)}</span></div>
+                  )}
+                </article>
+              </Link>
+            ))
+          )
+        ) : filtered.length === 0 ? (
           <div className="empty">{search.trim() ? '검색 결과가 없습니다.' : '아직 등록된 글이 없습니다.'}</div>
         ) : (
-          visiblePosts.map(post =>
-            post.category === '롤링페이퍼' ? (
-              <RollingPaperCard key={post.id} post={post} />
-            ) : (
-              <PostCard key={post.id} post={post} onReact={handleReact} />
-            )
-          )
+          visiblePosts.map(post => (
+            <Link to={`/post/${post.id}`} key={post.id} style={{ display: 'block' }}>
+              <article
+                className={`post${post.color && post.color !== '#ffffff' ? ' post-colored' : ''}`}
+                style={post.color && post.color !== '#ffffff' ? { background: post.color } : undefined}
+              >
+                <div className="post-top">
+                  <div className="post-title">
+                    {post.is_pinned && <span className="post-category pinned">📌 공지</span>}
+                    {post.tag && <span className="post-category">{post.tag}</span>}
+                    <span className="post-category">{categoryName(post.category_id)}</span>
+                    {post.title}
+                  </div>
+                  <div className="post-meta">{formatDate(post.created_at)} · 조회 {post.view_count}</div>
+                </div>
+                <div className="post-body">{excerpt(post.content)}</div>
+                <div className="post-footer">
+                  <span className="post-author">추천 {post.like_count} · 댓글 {post.comment_count}</span>
+                </div>
+              </article>
+            </Link>
+          ))
         )}
       </section>
 
-      {visibleCount < sorted.length && (
+      {currentTab !== '롤링페이퍼' && visibleCount < filtered.length && (
         <div className="actions" style={{ justifyContent: 'center', marginTop: 4 }}>
-          <button className="btn-secondary" type="button" onClick={() => setVisibleCount(v => v + PAGE_SIZE)}>
-            더보기 ({sorted.length - visibleCount}개 더 있음)
+          <button className="btn-secondary" type="button" onClick={() => setVisibleCount(v => v + 20)}>
+            더보기 ({filtered.length - visibleCount}개 더 있음)
           </button>
         </div>
       )}

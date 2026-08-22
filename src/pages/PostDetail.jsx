@@ -1,0 +1,283 @@
+import { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { supabase } from '../supabaseClient.js';
+import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
+import ReportButton from '../components/ReportButton.jsx';
+
+const TAGS = ['일반', '질문', '정보', '잡담', '유머'];
+const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
+const VIEWED_KEY = 'viewed-posts';
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export default function PostDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user, isAdmin } = useSupabaseAuth();
+
+  const [post, setPost] = useState(null);
+  const [category, setCategory] = useState(null);
+  const [author, setAuthor] = useState(null);
+  const [myVote, setMyVote] = useState(0);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editTag, setEditTag] = useState(TAGS[0]);
+  const [editColor, setEditColor] = useState(POST_COLORS[0]);
+
+  const [commentText, setCommentText] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const canModify = post && user && (post.author_id === user.id || isAdmin);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data: p } = await supabase.from('posts').select('*').eq('id', id).single();
+    if (!p || p.is_deleted) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+    setPost(p);
+    setEditTitle(p.title);
+    setEditContent(p.content);
+    setEditTag(p.tag || TAGS[0]);
+    setEditColor(p.color || POST_COLORS[0]);
+
+    const { data: cat } = await supabase.from('categories').select('*').eq('id', p.category_id).single();
+    setCategory(cat);
+    const { data: prof } = await supabase.from('profiles').select('nickname').eq('id', p.author_id).single();
+    setAuthor(prof);
+
+    if (user) {
+      const { data: vote } = await supabase.from('post_likes').select('value').eq('post_id', id).eq('user_id', user.id).maybeSingle();
+      setMyVote(vote?.value || 0);
+      const { data: bm } = await supabase.from('post_bookmarks').select('post_id').eq('post_id', id).eq('user_id', user.id).maybeSingle();
+      setBookmarked(!!bm);
+    }
+
+    const { data: cmts } = await supabase.from('comments').select('*').eq('post_id', id).eq('is_deleted', false).order('created_at', { ascending: true });
+    if (cmts?.length) {
+      const authorIds = [...new Set(cmts.map(c => c.author_id))];
+      const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', authorIds);
+      const nameMap = Object.fromEntries((profs || []).map(pr => [pr.id, pr.nickname]));
+      setComments(cmts.map(c => ({ ...c, authorName: nameMap[c.author_id] || '알 수 없음' })));
+    } else {
+      setComments([]);
+    }
+
+    setLoading(false);
+
+    try {
+      const viewed = JSON.parse(sessionStorage.getItem(VIEWED_KEY) || '[]');
+      if (!viewed.includes(id)) {
+        viewed.push(id);
+        sessionStorage.setItem(VIEWED_KEY, JSON.stringify(viewed));
+        supabase.rpc('increment_post_view', { p_post_id: id });
+      }
+    } catch (e) { /* ignore */ }
+  }, [id, user]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleVote(value) {
+    if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (myVote === value) {
+      await supabase.from('post_likes').delete().eq('post_id', id).eq('user_id', user.id);
+      setMyVote(0);
+    } else if (myVote === 0) {
+      await supabase.from('post_likes').insert({ post_id: id, user_id: user.id, value });
+      setMyVote(value);
+    } else {
+      await supabase.from('post_likes').update({ value }).eq('post_id', id).eq('user_id', user.id);
+      setMyVote(value);
+    }
+    const { data: p } = await supabase.from('posts').select('like_count, dislike_count').eq('id', id).single();
+    if (p) setPost(prev => ({ ...prev, ...p }));
+  }
+
+  async function handleBookmark() {
+    if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (bookmarked) {
+      await supabase.from('post_bookmarks').delete().eq('post_id', id).eq('user_id', user.id);
+    } else {
+      await supabase.from('post_bookmarks').insert({ post_id: id, user_id: user.id });
+    }
+    setBookmarked(!bookmarked);
+  }
+
+  function handleShare() {
+    navigator.clipboard?.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!editTitle.trim() || !editContent.trim()) {
+      alert('제목과 내용을 입력해주세요.');
+      return;
+    }
+    const { error } = await supabase.from('posts').update({
+      title: editTitle.trim(), content: editContent.trim(), tag: editTag, color: editColor
+    }).eq('id', id);
+    if (error) { alert(error.message); return; }
+    setEditing(false);
+    load();
+  }
+
+  async function handleDelete() {
+    if (!confirm('이 글을 삭제하시겠습니까?')) return;
+    if (isAdmin) {
+      await supabase.from('posts').delete().eq('id', id);
+    } else {
+      await supabase.from('posts').update({ is_deleted: true }).eq('id', id);
+    }
+    navigate('/');
+  }
+
+  async function submitComment(e, parentId = null) {
+    e.preventDefault();
+    const text = parentId ? replyText : commentText;
+    if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (!text.trim()) { alert('내용을 입력해주세요.'); return; }
+    const { error } = await supabase.from('comments').insert({
+      post_id: id, author_id: user.id, content: text.trim(), parent_id: parentId
+    });
+    if (error) { alert(error.message); return; }
+    if (parentId) { setReplyText(''); setReplyTo(null); } else { setCommentText(''); }
+    load();
+  }
+
+  async function deleteComment(commentId) {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+    if (isAdmin) {
+      await supabase.from('comments').delete().eq('id', commentId);
+    } else {
+      await supabase.from('comments').update({ is_deleted: true }).eq('id', commentId);
+    }
+    load();
+  }
+
+  if (loading) return <div className="empty">불러오는 중...</div>;
+  if (notFound) return <div className="empty">존재하지 않거나 삭제된 게시글입니다.</div>;
+
+  const topLevel = comments.filter(c => !c.parent_id);
+  const repliesOf = pid => comments.filter(c => c.parent_id === pid);
+
+  if (editing) {
+    return (
+      <article className="post">
+        <form onSubmit={saveEdit}>
+          <div className="row">
+            <select value={editTag} onChange={e => setEditTag(e.target.value)}>
+              {TAGS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="row"><input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          <div className="row"><textarea value={editContent} onChange={e => setEditContent(e.target.value)} /></div>
+          <div className="row color-picker">
+            {POST_COLORS.map(c => (
+              <button key={c} type="button" className={`color-swatch${c === editColor ? ' selected' : ''}`} style={{ background: c }} onClick={() => setEditColor(c)} />
+            ))}
+          </div>
+          <div className="actions" style={{ gap: 8 }}>
+            <button type="button" className="btn-secondary" onClick={() => setEditing(false)}>취소</button>
+            <button type="submit" className="btn-primary">저장</button>
+          </div>
+        </form>
+      </article>
+    );
+  }
+
+  return (
+    <>
+      <article
+        className={`post${post.color && post.color !== '#ffffff' ? ' post-colored' : ''}`}
+        style={post.color && post.color !== '#ffffff' ? { background: post.color } : undefined}
+      >
+        <div className="post-top">
+          <div className="post-title">
+            {post.is_pinned && <span className="post-category pinned">📌 공지</span>}
+            {post.tag && <span className="post-category">{post.tag}</span>}
+            <span className="post-category">{category?.name}</span>
+            {post.title}
+          </div>
+        </div>
+        <div className="post-meta" style={{ marginBottom: 10 }}>
+          <Link to={`/user/${post.author_id}`}>{author?.nickname || '알 수 없음'}</Link> · {formatDate(post.created_at)} · 조회 {post.view_count}
+        </div>
+        <div className="post-body">{post.content}</div>
+        <div className="post-footer">
+          <span className="post-author">
+            <button type="button" className="reaction-btn" onClick={handleBookmark}>{bookmarked ? '★ 스크랩됨' : '☆ 스크랩'}</button>{' '}
+            <button type="button" className="reaction-btn" onClick={handleShare}>{copied ? '복사됨!' : '🔗 공유'}</button>{' '}
+            <ReportButton targetType="post" targetId={post.id} />
+          </span>
+          {canModify && (
+            <span>
+              <button type="button" className="btn-delete" onClick={() => setEditing(true)} style={{ color: 'var(--accent)' }}>수정</button>
+              <button type="button" className="btn-delete" onClick={handleDelete}>삭제</button>
+            </span>
+          )}
+        </div>
+        <div className="reaction-bar">
+          <button type="button" className="reaction-btn" onClick={() => handleVote(1)} style={myVote === 1 ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}>
+            👍 추천 {post.like_count}
+          </button>
+          <button type="button" className="reaction-btn" onClick={() => handleVote(-1)} style={myVote === -1 ? { borderColor: 'var(--danger)', color: 'var(--danger)' } : undefined}>
+            👎 비추천 {post.dislike_count}
+          </button>
+        </div>
+      </article>
+
+      <div className="comment-section" style={{ border: 'none', paddingTop: 0 }}>
+        <h3 style={{ fontSize: 15, margin: '0 0 10px' }}>댓글 {comments.length}</h3>
+        {topLevel.length === 0 && <div className="comment-loading">아직 댓글이 없습니다.</div>}
+        {topLevel.map(c => (
+          <div key={c.id}>
+            <div className="comment-item">
+              <span className="comment-author">{c.authorName}</span>
+              {c.content}
+              <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}>답글</button>
+              {user && (user.id === c.author_id || isAdmin) && (
+                <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(c.id)}>삭제</button>
+              )}
+            </div>
+            {repliesOf(c.id).map(r => (
+              <div className="comment-item" key={r.id} style={{ marginLeft: 24 }}>
+                <span className="comment-author">↳ {r.authorName}</span>
+                {r.content}
+                {user && (user.id === r.author_id || isAdmin) && (
+                  <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(r.id)}>삭제</button>
+                )}
+              </div>
+            ))}
+            {replyTo === c.id && (
+              <form className="comment-form" style={{ marginLeft: 24 }} onSubmit={e => submitComment(e, c.id)}>
+                <input type="text" placeholder="답글을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
+                <button className="btn-primary" type="submit">등록</button>
+              </form>
+            )}
+          </div>
+        ))}
+        <form className="comment-form" onSubmit={e => submitComment(e)}>
+          <input type="text" placeholder={user ? '댓글을 입력하세요' : '로그인 후 댓글을 작성할 수 있습니다'} value={commentText} onChange={e => setCommentText(e.target.value)} disabled={!user} />
+          <button className="btn-primary" type="submit" disabled={!user}>등록</button>
+        </form>
+      </div>
+    </>
+  );
+}

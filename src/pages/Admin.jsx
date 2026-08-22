@@ -1,95 +1,118 @@
 import { useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, updateDoc, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase.js';
-import { useAuth } from '../AuthContext.jsx';
+import { Link } from 'react-router-dom';
+import { supabase } from '../supabaseClient.js';
+import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
+
+const REASON_LABELS = {
+  abuse: '욕설', defamation: '악의적인 비방', sexual: '성적인 콘텐츠',
+  privacy: '개인정보 노출', spam: '스팸', other: '기타'
+};
+const STATUS_LABELS = { pending: '대기', reviewing: '검토중', resolved: '완료', dismissed: '기각' };
 
 export default function Admin() {
-  const { isAdmin, loginAdmin, logoutAdmin } = useAuth();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const { user, profile, isAdmin, loading } = useSupabaseAuth();
+  const [tab, setTab] = useState('posts');
   const [posts, setPosts] = useState([]);
+  const [reports, setReports] = useState([]);
 
   useEffect(() => {
     if (!isAdmin) return;
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, snapshot => {
-      setPosts(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, [isAdmin]);
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    setError('');
-    try {
-      await loginAdmin(username.trim(), password);
-    } catch (e2) {
-      setError('로그인 정보가 올바르지 않습니다.');
+    if (tab === 'posts') {
+      supabase.from('posts').select('*').order('created_at', { ascending: false }).then(({ data }) => setPosts(data || []));
+    } else {
+      supabase.from('reports').select('*').order('created_at', { ascending: false }).then(({ data }) => setReports(data || []));
     }
-  }
-
-  async function handleDelete(id) {
-    if (!confirm('이 글을 삭제하시겠습니까?')) return;
-    await deleteDoc(doc(db, 'posts', id));
-  }
+  }, [isAdmin, tab]);
 
   async function togglePin(post) {
-    await updateDoc(doc(db, 'posts', post.id), { pinned: !post.pinned });
+    await supabase.from('posts').update({ is_pinned: !post.is_pinned }).eq('id', post.id);
+    setPosts(posts.map(p => p.id === post.id ? { ...p, is_pinned: !p.is_pinned } : p));
+  }
+
+  async function hardDelete(post) {
+    if (!confirm('완전히 삭제하시겠습니까?')) return;
+    await supabase.from('posts').delete().eq('id', post.id);
+    setPosts(posts.filter(p => p.id !== post.id));
+  }
+
+  async function updateReportStatus(report, status) {
+    await supabase.from('reports').update({ status }).eq('id', report.id);
+    await supabase.from('report_actions').insert({
+      report_id: report.id,
+      admin_id: user.id,
+      action: status === 'resolved' ? 'delete_content' : status === 'dismissed' ? 'dismiss' : 'deferred'
+    });
+    setReports(reports.map(r => r.id === report.id ? { ...r, status } : r));
+  }
+
+  if (loading) return <div className="empty">확인 중...</div>;
+
+  if (!user) {
+    return (
+      <div className="content-page">
+        <h2>관리자 페이지</h2>
+        <p>로그인이 필요합니다. <Link to="/signin" style={{ color: 'var(--accent)' }}>로그인하러 가기</Link></p>
+      </div>
+    );
   }
 
   if (!isAdmin) {
-    return (
-      <div className="write-box">
-        <h2>관리자 로그인</h2>
-        <form onSubmit={handleLogin}>
-          <div className="row">
-            <input type="text" placeholder="관리자 아이디" value={username} onChange={e => setUsername(e.target.value)} />
-          </div>
-          <div className="row">
-            <input type="password" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} />
-          </div>
-          {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
-          <div className="actions">
-            <button className="btn-primary" type="submit">로그인</button>
-          </div>
-        </form>
-      </div>
-    );
+    return <div className="content-page"><h2>접근 권한이 없습니다</h2><p>관리자만 볼 수 있는 페이지입니다.</p></div>;
   }
 
   return (
     <>
       <div className="list-header">
-        <span>관리자 모드 · 전체 {posts.length}개의 글</span>
-        <button className="btn-secondary" type="button" onClick={logoutAdmin}>로그아웃</button>
+        <span>관리자 모드 ({profile?.nickname})</span>
       </div>
-      {posts.map(post => (
-        <article
-          className={`post${post.color && post.color !== '#ffffff' ? ' post-colored' : ''}`}
-          key={post.id}
-          style={post.color && post.color !== '#ffffff' ? { background: post.color } : undefined}
-        >
+      <div className="tabs">
+        <button type="button" className={`tab${tab === 'posts' ? ' active' : ''}`} onClick={() => setTab('posts')}>게시글 관리</button>
+        <button type="button" className={`tab${tab === 'reports' ? ' active' : ''}`} onClick={() => setTab('reports')}>신고 관리</button>
+      </div>
+
+      {tab === 'posts' && posts.map(post => (
+        <article className="post" key={post.id}>
           <div className="post-top">
             <div className="post-title">
-              {post.pinned && <span className="post-category pinned">📌 공지</span>}
-              <span className="post-category">{post.category || '자유'}</span>
+              {post.is_pinned && <span className="post-category pinned">📌</span>}
+              {post.is_deleted && <span className="post-category" style={{ color: 'var(--danger)' }}>삭제됨</span>}
               {post.title}
             </div>
-            <div className="post-meta">조회 {post.views || 0}</div>
           </div>
-          <div className="post-body">{post.content}</div>
           <div className="post-footer">
-            <span className="post-author">{post.author || '익명'}</span>
+            <span className="post-author">조회 {post.view_count} · 추천 {post.like_count}</span>
             <span>
-              <button type="button" className="btn-delete" onClick={() => togglePin(post)} style={{ color: 'var(--accent)' }}>
-                {post.pinned ? '고정 해제' : '고정'}
+              <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={() => togglePin(post)}>
+                {post.is_pinned ? '고정 해제' : '고정'}
               </button>
-              <button type="button" className="btn-delete" onClick={() => handleDelete(post.id)}>삭제</button>
+              <button type="button" className="btn-delete" onClick={() => hardDelete(post)}>완전삭제</button>
             </span>
           </div>
         </article>
       ))}
+
+      {tab === 'reports' && (
+        reports.length === 0 ? <div className="empty">접수된 신고가 없습니다.</div> : reports.map(r => (
+          <article className="post" key={r.id}>
+            <div className="post-top">
+              <div className="post-title">
+                <span className="post-category">{r.target_type}</span>
+                {REASON_LABELS[r.reason]}
+              </div>
+              <div className="post-meta">{STATUS_LABELS[r.status]}</div>
+            </div>
+            {r.detail && <div className="post-body">{r.detail}</div>}
+            <div className="post-footer">
+              <span className="post-author">대상 ID: {r.target_id}</span>
+              <span>
+                <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={() => updateReportStatus(r, 'reviewing')}>검토중</button>
+                <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={() => updateReportStatus(r, 'resolved')}>완료 처리</button>
+                <button type="button" className="btn-delete" onClick={() => updateReportStatus(r, 'dismissed')}>기각</button>
+              </span>
+            </div>
+          </article>
+        ))
+      )}
     </>
   );
 }

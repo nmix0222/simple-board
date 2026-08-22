@@ -3,6 +3,9 @@ import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import WelcomeGate from './components/WelcomeGate.jsx';
 import Board from './pages/Board.jsx';
+import PostDetail from './pages/PostDetail.jsx';
+import RollingPaperDetail from './pages/RollingPaperDetail.jsx';
+import UserProfile from './pages/UserProfile.jsx';
 import About from './pages/About.jsx';
 import Privacy from './pages/Privacy.jsx';
 import Terms from './pages/Terms.jsx';
@@ -21,6 +24,9 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<Board />} />
+          <Route path="/post/:id" element={<PostDetail />} />
+          <Route path="/paper/:id" element={<RollingPaperDetail />} />
+          <Route path="/user/:id" element={<UserProfile />} />
           <Route path="/about" element={<About />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
