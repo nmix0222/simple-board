@@ -5,7 +5,7 @@ import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 export default function SignIn() {
   const { signIn } = useSupabaseAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -15,13 +15,13 @@ export default function SignIn() {
     setError('');
     setSubmitting(true);
     try {
-      await signIn({ email: email.trim(), password });
+      await signIn({ email: username.trim(), password });
       navigate('/');
     } catch (err) {
       if (err.message?.includes('Invalid login credentials')) {
-        setError('이메일 또는 비밀번호가 일치하지 않습니다.');
+        setError('아이디 또는 비밀번호가 일치하지 않습니다.');
       } else if (err.message?.includes('Email not confirmed')) {
-        setError('이메일 인증이 완료되지 않았습니다. 메일함을 확인해주세요.');
+        setError('계정이 아직 활성화되지 않았습니다. 관리자에게 문의해주세요.');
       } else {
         setError(err.message || '로그인에 실패했습니다.');
       }
@@ -35,7 +35,7 @@ export default function SignIn() {
       <h2>로그인</h2>
       <form onSubmit={handleSubmit}>
         <div className="row">
-          <input type="email" placeholder="이메일" value={email} onChange={e => setEmail(e.target.value)} required />
+          <input type="text" placeholder="아이디" value={username} onChange={e => setUsername(e.target.value)} required />
         </div>
         <div className="row">
           <input type="password" placeholder="비밀번호" value={password} onChange={e => setPassword(e.target.value)} />

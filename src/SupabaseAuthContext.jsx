@@ -3,6 +3,14 @@ import { supabase } from './supabaseClient.js';
 
 const SupabaseAuthContext = createContext(null);
 
+// 이메일 없이 "아이디"만으로 가입/로그인할 수 있도록, 아이디를 내부적으로만 쓰는
+// 가짜 이메일 주소로 변환한다. "@"가 포함된 입력(관리자의 실제 이메일 등)은 그대로 사용한다.
+function usernameToEmail(input) {
+  const trimmed = input.trim();
+  if (trimmed.includes('@')) return trimmed;
+  return `${trimmed}@id.simple-board.local`;
+}
+
 export function SupabaseAuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading, null = signed out
   const [profile, setProfile] = useState(null);
@@ -34,7 +42,7 @@ export function SupabaseAuthProvider({ children }) {
 
   async function signUp({ email, password, nickname }) {
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: usernameToEmail(email),
       password,
       options: { data: { nickname } }
     });
@@ -45,7 +53,7 @@ export function SupabaseAuthProvider({ children }) {
   }
 
   async function signIn({ email, password }) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email: usernameToEmail(email), password });
     if (error) throw error;
   }
 

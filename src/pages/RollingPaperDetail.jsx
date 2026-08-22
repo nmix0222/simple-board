@@ -57,6 +57,7 @@ export default function RollingPaperDetail() {
   const [replyText, setReplyText] = useState('');
   const [replyAnonymous, setReplyAnonymous] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [printMode, setPrintMode] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -154,11 +155,37 @@ export default function RollingPaperDetail() {
       const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', authorIds);
       nameMap = Object.fromEntries((profs || []).map(p => [p.id, p.nickname]));
     }
+
+    let likeCounts = {};
+    let likedByMe = new Set();
+    if (rows.length) {
+      const { data: reactions } = await supabase
+        .from('rolling_paper_reactions')
+        .select('message_id, user_id')
+        .in('message_id', rows.map(m => m.id));
+      for (const r of reactions || []) {
+        likeCounts[r.message_id] = (likeCounts[r.message_id] || 0) + 1;
+        if (user && r.user_id === user.id) likedByMe.add(r.message_id);
+      }
+    }
+
     setMessages(rows.map(m => ({
       ...m,
       authorName: m.is_anonymous ? '익명' : (m.display_name || nameMap[m.author_id] || '알 수 없음'),
-      comments: commentsByMessage[m.id] || []
+      comments: commentsByMessage[m.id] || [],
+      likeCount: likeCounts[m.id] || 0,
+      likedByMe: likedByMe.has(m.id)
     })));
+  }
+
+  async function toggleLike(messageId, currentlyLiked) {
+    if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (currentlyLiked) {
+      await supabase.from('rolling_paper_reactions').delete().eq('message_id', messageId).eq('user_id', user.id);
+    } else {
+      await supabase.from('rolling_paper_reactions').insert({ message_id: messageId, user_id: user.id });
+    }
+    loadMessages();
   }
 
   async function submitReply(e, messageId) {
@@ -244,12 +271,15 @@ export default function RollingPaperDetail() {
   async function handleExportPdf() {
     if (!wallRef.current) return;
     setExporting(true);
+    setPrintMode(true);
+    // 코르크보드 나무질감/기울어진 카드 스타일이 사라진 상태로 다시 그려질 때까지 한 프레임 기다린다.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
         import('html2canvas'),
         import('jspdf')
       ]);
-      const canvas = await html2canvas(wallRef.current, { scale: 2, useCORS: true });
+      const canvas = await html2canvas(wallRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
       const pageWidth = pdf.internal.pageSize.getWidth();
@@ -263,6 +293,7 @@ export default function RollingPaperDetail() {
       alert('PDF 생성에 실패했습니다: ' + e.message);
     } finally {
       setExporting(false);
+      setPrintMode(false);
     }
   }
 
@@ -365,33 +396,45 @@ export default function RollingPaperDetail() {
             </div>
           )}
 
-          <div className={`message-wall${isGraduation ? ' corkboard' : ''}`} ref={wallRef}>
+          <div className={`message-wall${isGraduation && !printMode ? ' corkboard' : ''}`} ref={wallRef}>
             {messages === null ? null : messages.length === 0 ? (
               <div className="empty">아직 남겨진 메시지가 없습니다.</div>
             ) : (
               messages.map((m, i) => (
                 <div
-                  className={`message-card${isGraduation ? ' pinned-note' : ''}`}
-                  style={{ background: CARD_COLORS[i % CARD_COLORS.length], '--tilt': `${((i * 37) % 9) - 4}deg` }}
+                  className={`message-card${isGraduation && !printMode ? ' pinned-note' : ''}`}
+                  style={{ background: CARD_COLORS[i % CARD_COLORS.length], '--tilt': printMode ? '0deg' : `${((i * 37) % 9) - 4}deg` }}
                   key={m.id}
                 >
-                  {isGraduation && <span className="pin-dot" aria-hidden="true">📌</span>}
+                  {isGraduation && !printMode && <span className="pin-dot" aria-hidden="true">📌</span>}
                   <div className="message-author">{m.authorName}</div>
                   <div className="message-content">{m.content}</div>
-                  <button
-                    type="button"
-                    className="link-btn"
-                    style={{ marginTop: 6, fontSize: 11, color: 'inherit', opacity: 0.75 }}
-                    onClick={() => setOpenReplyId(openReplyId === m.id ? null : m.id)}
-                  >
-                    💬 답장 {m.comments.length}
-                  </button>
+                  {!printMode && (
+                    <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        style={{ fontSize: 11, color: m.likedByMe ? '#e0245e' : 'inherit', opacity: m.likedByMe ? 1 : 0.75 }}
+                        onClick={() => toggleLike(m.id, m.likedByMe)}
+                      >
+                        {m.likedByMe ? '❤️' : '🤍'} {m.likeCount}
+                      </button>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        style={{ fontSize: 11, color: 'inherit', opacity: 0.75 }}
+                        onClick={() => setOpenReplyId(openReplyId === m.id ? null : m.id)}
+                      >
+                        💬 답장 {m.comments.length}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             )}
           </div>
 
-          {openReplyId && messages && (() => {
+          {!printMode && openReplyId && messages && (() => {
             const target = messages.find(m => m.id === openReplyId);
             if (!target) return null;
             return (

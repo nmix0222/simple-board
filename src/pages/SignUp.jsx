@@ -5,7 +5,7 @@ import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 export default function SignUp() {
   const { signUp } = useSupabaseAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
@@ -15,17 +15,21 @@ export default function SignUp() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (username.trim().length < 2) {
+      setError('아이디는 2자 이상 입력해주세요.');
+      return;
+    }
     if (nickname.trim().length < 2) {
       setError('닉네임은 2자 이상 입력해주세요.');
       return;
     }
-    if (password.length < 8) {
-      setError('비밀번호는 8자 이상 입력해주세요.');
+    if (password.length < 6) {
+      setError('비밀번호는 6자 이상 입력해주세요.');
       return;
     }
     setSubmitting(true);
     try {
-      const { immediateSession } = await signUp({ email: email.trim(), password, nickname: nickname.trim() });
+      const { immediateSession } = await signUp({ email: username.trim(), password, nickname: nickname.trim() });
       if (immediateSession) {
         navigate('/');
       } else {
@@ -33,7 +37,7 @@ export default function SignUp() {
       }
     } catch (err) {
       if (err.message?.includes('already registered')) {
-        setError('이미 가입된 이메일입니다.');
+        setError('이미 사용 중인 아이디입니다.');
       } else {
         setError(err.message || '회원가입에 실패했습니다.');
       }
@@ -46,7 +50,7 @@ export default function SignUp() {
     return (
       <div className="write-box">
         <h2>회원가입 완료</h2>
-        <p>입력하신 이메일로 인증 메일을 보냈습니다. 메일함에서 인증 링크를 눌러주셔야 글쓰기·댓글 작성이 가능합니다.</p>
+        <p>이제 로그인하실 수 있습니다.</p>
         <div className="actions" style={{ gap: 8 }}>
           <button className="btn-secondary" onClick={() => navigate('/')}>게시판 둘러보기</button>
           <button className="btn-primary" onClick={() => navigate('/signin')}>로그인하러 가기</button>
@@ -60,13 +64,13 @@ export default function SignUp() {
       <h2>회원가입</h2>
       <form onSubmit={handleSubmit}>
         <div className="row">
+          <input type="text" placeholder="아이디 (2자 이상)" value={username} onChange={e => setUsername(e.target.value)} required />
+        </div>
+        <div className="row">
           <input type="text" placeholder="닉네임 (2자 이상)" value={nickname} onChange={e => setNickname(e.target.value)} />
         </div>
         <div className="row">
-          <input type="email" placeholder="이메일" value={email} onChange={e => setEmail(e.target.value)} required />
-        </div>
-        <div className="row">
-          <input type="password" placeholder="비밀번호 (8자 이상)" value={password} onChange={e => setPassword(e.target.value)} />
+          <input type="password" placeholder="비밀번호 (6자 이상)" value={password} onChange={e => setPassword(e.target.value)} />
         </div>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="actions">

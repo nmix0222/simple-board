@@ -356,9 +356,10 @@ export default function Board() {
                     <div className="post-meta">{formatDate(paper.created_at)}</div>
                   </div>
                   {paper.description && <div className="post-body">{excerpt(paper.description)}</div>}
-                  {paper.deadline && (
-                    <div className="post-footer"><span className="post-author">마감 {formatDate(paper.deadline)}</span></div>
-                  )}
+                  <div className="post-footer">
+                    <span className="post-author">💌 메시지 {paper.message_count || 0}개</span>
+                    {paper.deadline && <span className="post-author">마감 {formatDate(paper.deadline)}</span>}
+                  </div>
                 </article>
               </Link>
             ))

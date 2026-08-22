@@ -311,6 +311,7 @@ create table rolling_papers (
   allow_anonymous boolean not null default true,
   deadline timestamptz,
   is_deleted boolean not null default false,
+  message_count integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (visibility = 'public' or passkey_hash is not null)
@@ -328,7 +329,7 @@ create policy rolling_papers_delete_admin_only on rolling_papers for delete usin
 
 create view rolling_papers_public as
   select id, creator_id, category_id, title, target_subject, description,
-         visibility, allow_anonymous, deadline, is_deleted, created_at, updated_at
+         visibility, allow_anonymous, deadline, is_deleted, created_at, updated_at, message_count
   from rolling_papers
   where not is_deleted or is_admin() or creator_id = auth.uid();
 
@@ -405,6 +406,23 @@ create policy messages_update_own_or_admin on rolling_paper_messages for update 
 create policy messages_delete_admin_only on rolling_paper_messages for delete using (is_admin());
 -- insert는 아래 post_rolling_paper_message() 함수를 통해서만 (passkey 검증 필요하므로 직접 insert 금지)
 create policy messages_no_direct_insert on rolling_paper_messages for insert with check (false);
+
+-- 게시판 목록에서 "메시지 N개"를 보여주기 위한 카운터. 매번 count(*) 하지 않도록 비정규화해서 유지한다.
+create function bump_rolling_paper_message_count() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if tg_op = 'INSERT' then
+    update rolling_papers set message_count = message_count + 1 where id = new.rolling_paper_id;
+  elsif tg_op = 'DELETE' then
+    update rolling_papers set message_count = greatest(message_count - 1, 0) where id = old.rolling_paper_id;
+  end if;
+  return null;
+end;
+$$;
+
+create trigger rolling_paper_messages_after_change
+  after insert or delete on rolling_paper_messages
+  for each row execute function bump_rolling_paper_message_count();
 
 create view rolling_paper_messages_public as
   select m.id, m.rolling_paper_id,
