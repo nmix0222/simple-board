@@ -14,6 +14,7 @@ export default function Board() {
   const [categories, setCategories] = useState([]);
   const [posts, setPosts] = useState([]);
   const [papers, setPapers] = useState([]);
+  const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState('전체');
   const [search, setSearch] = useState('');
@@ -36,6 +37,9 @@ export default function Board() {
     supabase.from('categories').select('*').order('sort_order').then(({ data }) => {
       setCategories(data || []);
       if (data && data.length) setCategoryId(data[0].id);
+    });
+    supabase.from('notices').select('*').eq('is_pinned', true).order('created_at', { ascending: false }).limit(3).then(({ data }) => {
+      setNotices(data || []);
     });
   }, []);
 
@@ -259,6 +263,16 @@ export default function Board() {
       )}
 
       <AdSlot />
+
+      {notices.length > 0 && currentTab === '전체' && (
+        <div className="notice-strip">
+          {notices.map(n => (
+            <Link to="/notices" key={n.id} className="notice-row">
+              <span className="notice-badge">공지</span>{n.title}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="tabs">
         <button type="button" className={`tab${currentTab === '전체' ? ' active' : ''}`} onClick={() => setCurrentTab('전체')}>전체</button>

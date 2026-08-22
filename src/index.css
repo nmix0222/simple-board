@@ -169,6 +169,32 @@ button {
 }
 .sort-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .post-category.pinned { background: #fde68a; color: #78350f; }
+.notice-strip {
+  background: var(--card-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.notice-row {
+  display: block;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.notice-row:last-child { border-bottom: none; }
+.notice-row:hover { background: var(--hover-bg); }
+.notice-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 8px;
+}
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .tab {
   background: var(--card);
