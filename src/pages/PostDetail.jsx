@@ -6,6 +6,7 @@ import ReportButton from '../components/ReportButton.jsx';
 import { formatDateTime as formatDate, excerpt } from '../lib/format.js';
 import { TAGS, POST_COLORS } from '../lib/constants.js';
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
+import { isBannedWordError, reportBannedWordViolation } from '../lib/bannedWordPenalty.js';
 
 const VIEWED_KEY = 'viewed-posts';
 
@@ -196,7 +197,11 @@ export default function PostDetail() {
     const { error } = await supabase.from('posts').update({
       title: editTitle.trim(), content: editContent.trim(), tag: editTag, color: editColor, image_url: imageUrl
     }).eq('id', id);
-    if (error) { alert(error.message); return; }
+    if (error) {
+      if (isBannedWordError(error)) alert(await reportBannedWordViolation(supabase, `${editTitle} ${editContent}`));
+      else alert(error.message);
+      return;
+    }
     // 이미지를 교체하거나 제거했으면, 더 이상 안 쓰는 예전 파일을 스토리지에서 같이 지운다
     // (안 지우면 아무도 안 쓰는 파일이 계속 쌓이기만 함).
     if (oldImageUrl && oldImageUrl !== imageUrl) {
@@ -231,7 +236,11 @@ export default function PostDetail() {
     const { error } = await supabase.from('comments').insert({
       post_id: id, author_id: user.id, content: text.trim(), parent_id: parentId
     });
-    if (error) { alert(error.message); return; }
+    if (error) {
+      if (isBannedWordError(error)) alert(await reportBannedWordViolation(supabase, text));
+      else alert(error.message);
+      return;
+    }
     if (parentId) { setReplyText(''); setReplyTo(null); } else { setCommentText(''); }
     load();
   }
@@ -250,7 +259,11 @@ export default function PostDetail() {
     e.preventDefault();
     if (!editingCommentText.trim()) { alert('내용을 입력해주세요.'); return; }
     const { error } = await supabase.from('comments').update({ content: editingCommentText.trim() }).eq('id', commentId);
-    if (error) { alert(error.message); return; }
+    if (error) {
+      if (isBannedWordError(error)) alert(await reportBannedWordViolation(supabase, editingCommentText));
+      else alert(error.message);
+      return;
+    }
     cancelEditComment();
     load();
   }

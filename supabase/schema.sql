@@ -46,6 +46,7 @@ drop function if exists enforce_post_content_rules() cascade;
 drop function if exists enforce_comment_content_rules() cascade;
 drop function if exists log_admin_action(text, text, uuid, jsonb) cascade;
 drop function if exists restrict_user(uuid, text, text, timestamptz) cascade;
+drop function if exists handle_banned_word_violation(text) cascade;
 drop function if exists unrestrict_user(uuid) cascade;
 drop function if exists notify_on_comment() cascade;
 drop function if exists notify_on_rolling_paper_message() cascade;
@@ -175,6 +176,8 @@ insert into categories (name, slug, sort_order) values
 create table banned_words (
   id uuid primary key default gen_random_uuid(),
   word text not null unique,
+  -- warning: 경고만 기록, ban: 계정 즉시 이용정지 (성인/음란물 등)
+  severity text not null default 'warning' check (severity in ('warning', 'ban')),
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
@@ -941,7 +944,8 @@ create policy notices_admin_write on notices for all using (is_admin()) with che
 create table user_restrictions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
-  admin_id uuid not null references profiles(id),
+  -- null = 관리자가 아니라 시스템이 자동으로 내린 조치 (예: 금칙어 자동 감지)
+  admin_id uuid references profiles(id),
   type text not null check (type in ('warning', 'suspension')),
   reason text not null,
   expires_at timestamptz,
@@ -996,6 +1000,42 @@ begin
 end;
 $$;
 grant execute on function restrict_user(uuid, text, text, timestamptz) to authenticated;
+
+-- 금칙어 트리거가 게시물/댓글/롤링페이퍼 메시지 등록·수정 자체는 이미 차단했으므로(우회 불가),
+-- 여기서는 "시도했다"는 사실을 계정에 반영만 한다. severity에 따라 경고 또는 즉시 이용정지.
+-- (트리거는 하나의 트랜잭션 안에서 raise exception으로 롤백되기 때문에 그 안에서 직접 부수효과를 남길 수 없어 별도 RPC로 분리)
+create function handle_banned_word_violation(p_content text) returns text
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_word text;
+  v_severity text;
+begin
+  if auth.uid() is null then
+    raise exception '로그인이 필요합니다';
+  end if;
+
+  select word, severity into v_word, v_severity from banned_words
+    where p_content ilike '%' || word || '%'
+    order by (severity = 'ban') desc
+    limit 1;
+
+  if v_word is null then
+    return 'none';
+  end if;
+
+  if v_severity = 'ban' then
+    update profiles set status = 'restricted' where id = auth.uid();
+    insert into user_restrictions (user_id, admin_id, type, reason)
+    values (auth.uid(), null, 'suspension', '금칙어(성인/음란물) 사용 시도로 자동 이용정지: ' || v_word);
+    return 'banned';
+  else
+    insert into user_restrictions (user_id, admin_id, type, reason)
+    values (auth.uid(), null, 'warning', '금칙어 사용 시도로 자동 경고: ' || v_word);
+    return 'warned';
+  end if;
+end;
+$$;
+grant execute on function handle_banned_word_violation(text) to authenticated;
 
 create function unrestrict_user(p_user_id uuid)
 returns void

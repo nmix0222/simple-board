@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
+import { isBannedWordError, reportBannedWordViolation } from '../lib/bannedWordPenalty.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import { formatDateTime as formatDate } from '../lib/format.js';
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
@@ -220,7 +221,11 @@ export default function RollingPaperDetail() {
       is_anonymous: replyAnonymous,
       content: replyText.trim()
     });
-    if (err) { alert(err.message); return; }
+    if (err) {
+      if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, replyText));
+      else alert(err.message);
+      return;
+    }
     setReplyText('');
     loadMessages();
   }
@@ -239,7 +244,11 @@ export default function RollingPaperDetail() {
     e.preventDefault();
     if (!editingMessageContent.trim()) { alert('내용을 입력해주세요.'); return; }
     const { error: err } = await supabase.from('rolling_paper_messages').update({ content: editingMessageContent.trim() }).eq('id', messageId);
-    if (err) { alert(err.message); return; }
+    if (err) {
+      if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, editingMessageContent));
+      else alert(err.message);
+      return;
+    }
     cancelEditMessage();
     loadMessages();
   }
@@ -269,7 +278,11 @@ export default function RollingPaperDetail() {
     e.preventDefault();
     if (!editingReplyContent.trim()) { alert('내용을 입력해주세요.'); return; }
     const { error: err } = await supabase.from('rolling_paper_message_comments').update({ content: editingReplyContent.trim() }).eq('id', replyId);
-    if (err) { alert(err.message); return; }
+    if (err) {
+      if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, editingReplyContent));
+      else alert(err.message);
+      return;
+    }
     cancelEditReply();
     loadMessages();
   }
@@ -306,7 +319,11 @@ export default function RollingPaperDetail() {
       p_display_name: msgAnonymous ? null : msgName.trim(),
       p_passkey: paper.visibility === 'passkey' ? passkeyInput.trim().toUpperCase() : null
     });
-    if (err) { alert(err.message); return; }
+    if (err) {
+      if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, msgContent));
+      else alert(err.message);
+      return;
+    }
     setMsgName('');
     setMsgContent('');
     loadMessages();

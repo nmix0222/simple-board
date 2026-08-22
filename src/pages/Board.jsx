@@ -7,6 +7,7 @@ import { generatePasskey } from '../hash.js';
 import { formatDateTime as formatDate, excerpt } from '../lib/format.js';
 import { TAGS, POST_COLORS, ROLLING_PAPER } from '../lib/constants.js';
 import { CATEGORY_HUES, gradientFor } from '../lib/categoryTheme.js';
+import { isBannedWordError, reportBannedWordViolation } from '../lib/bannedWordPenalty.js';
 import AdSlot from '../components/AdSlot.jsx';
 
 const DRAFT_KEY = 'post-draft';
@@ -260,7 +261,12 @@ export default function Board() {
         loadPosts();
       }
     } catch (err) {
-      alert(err.message || '등록에 실패했습니다.');
+      if (isBannedWordError(err)) {
+        const msg = await reportBannedWordViolation(supabase, `${title} ${content}`);
+        alert(msg);
+      } else {
+        alert(err.message || '등록에 실패했습니다.');
+      }
     } finally {
       setSubmitting(false);
     }
