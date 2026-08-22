@@ -427,19 +427,32 @@ export default function RollingPaperDetail() {
           <button className="btn-primary" type="submit">입장</button>
         </form>
       ) : isHub ? (
-        <div className="hub-picker">
-          {HUB_LINKS.map(link => (
-            <button
-              type="button"
-              key={link.id}
-              className="hub-link-card"
-              onClick={() => navigate(`/paper/${link.id}?pk=${link.pk}`)}
-            >
-              <span>{link.label}</span>
-              <span className="hub-link-arrow">→</span>
+        <>
+          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+            <button type="button" className="btn-secondary" onClick={() => setShowQr(s => !s)} style={{ width: 'auto' }}>
+              {showQr ? 'QR코드 닫기' : '📱 QR코드로 공유'}
             </button>
-          ))}
-        </div>
+          </div>
+          {showQr && (
+            <div style={{ textAlign: 'center', padding: 16, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 16 }}>
+              <canvas ref={qrCanvasRef} />
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>이 QR코드를 스캔하면 패스키 입력 없이 바로 반 선택 화면으로 들어올 수 있어요.</div>
+            </div>
+          )}
+          <div className="hub-picker">
+            {HUB_LINKS.map(link => (
+              <button
+                type="button"
+                key={link.id}
+                className="hub-link-card"
+                onClick={() => navigate(`/paper/${link.id}?pk=${link.pk}`)}
+              >
+                <span>{link.label}</span>
+                <span className="hub-link-arrow">→</span>
+              </button>
+            ))}
+          </div>
+        </>
       ) : (
         <>
           {!expired && (
