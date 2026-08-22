@@ -62,6 +62,7 @@ export default function RollingPaperDetail() {
   const [msgName, setMsgName] = useState('');
   const [msgContent, setMsgContent] = useState('');
   const [msgAnonymous, setMsgAnonymous] = useState(false);
+  const [submittingMessage, setSubmittingMessage] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -71,6 +72,7 @@ export default function RollingPaperDetail() {
   const [replyName, setReplyName] = useState('');
   const [replyText, setReplyText] = useState('');
   const [replyAnonymous, setReplyAnonymous] = useState(false);
+  const [submittingReply, setSubmittingReply] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [printMode, setPrintMode] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -211,23 +213,29 @@ export default function RollingPaperDetail() {
 
   async function submitReply(e, messageId) {
     e.preventDefault();
+    if (submittingReply) return;
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
     if (!replyAnonymous && !replyName.trim()) { alert('이름을 입력해주세요.'); return; }
     if (!replyText.trim()) { alert('답장 내용을 입력해주세요.'); return; }
-    const { error: err } = await supabase.from('rolling_paper_message_comments').insert({
-      message_id: messageId,
-      author_id: user.id,
-      display_name: replyAnonymous ? null : replyName.trim(),
-      is_anonymous: replyAnonymous,
-      content: replyText.trim()
-    });
-    if (err) {
-      if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, replyText));
-      else alert(err.message);
-      return;
+    setSubmittingReply(true);
+    try {
+      const { error: err } = await supabase.from('rolling_paper_message_comments').insert({
+        message_id: messageId,
+        author_id: user.id,
+        display_name: replyAnonymous ? null : replyName.trim(),
+        is_anonymous: replyAnonymous,
+        content: replyText.trim()
+      });
+      if (err) {
+        if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, replyText));
+        else alert(err.message);
+        return;
+      }
+      setReplyText('');
+      loadMessages();
+    } finally {
+      setSubmittingReply(false);
     }
-    setReplyText('');
-    loadMessages();
   }
 
   function startEditMessage(m) {
@@ -313,25 +321,31 @@ export default function RollingPaperDetail() {
 
   async function handleAddMessage(e) {
     e.preventDefault();
+    if (submittingMessage) return;
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
     if (!msgAnonymous && !msgName.trim()) { alert('이름을 입력해주세요.'); return; }
     if (!msgContent.trim()) { alert('메시지 내용을 입력해주세요.'); return; }
-    const { error: err } = await supabase.rpc('post_rolling_paper_message', {
-      p_paper_id: id,
-      p_content: msgContent.trim(),
-      p_is_anonymous: msgAnonymous,
-      p_display_name: msgAnonymous ? null : msgName.trim(),
-      p_passkey: paper.visibility === 'passkey' ? passkeyInput.trim().toUpperCase() : null
-    });
-    if (err) {
-      if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, msgContent));
-      else alert(err.message);
-      return;
+    setSubmittingMessage(true);
+    try {
+      const { error: err } = await supabase.rpc('post_rolling_paper_message', {
+        p_paper_id: id,
+        p_content: msgContent.trim(),
+        p_is_anonymous: msgAnonymous,
+        p_display_name: msgAnonymous ? null : msgName.trim(),
+        p_passkey: paper.visibility === 'passkey' ? passkeyInput.trim().toUpperCase() : null
+      });
+      if (err) {
+        if (isBannedWordError(err)) alert(await reportBannedWordViolation(supabase, msgContent));
+        else alert(err.message);
+        return;
+      }
+      setMsgName('');
+      setMsgContent('');
+      loadMessages();
+      if (isGraduation) fireConfetti();
+    } finally {
+      setSubmittingMessage(false);
     }
-    setMsgName('');
-    setMsgContent('');
-    loadMessages();
-    if (isGraduation) fireConfetti();
   }
 
   async function handleDeletePaper() {
@@ -524,7 +538,7 @@ export default function RollingPaperDetail() {
                   </label>
                 )}
                 <div className="actions">
-                  <button className="btn-primary" type="submit" disabled={!user}>남기기</button>
+                  <button className="btn-primary" type="submit" disabled={!user || submittingMessage}>남기기</button>
                 </div>
               </form>
             </section>
@@ -657,7 +671,7 @@ export default function RollingPaperDetail() {
                     익명으로 답장하기
                   </label>
                   <div className="actions">
-                    <button className="btn-primary" type="submit">답장 보내기</button>
+                    <button className="btn-primary" type="submit" disabled={submittingReply}>답장 보내기</button>
                   </div>
                 </form>
               </div>

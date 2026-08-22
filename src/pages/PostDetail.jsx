@@ -37,6 +37,7 @@ export default function PostDetail() {
   const [editImageRemoved, setEditImageRemoved] = useState(false);
 
   const [commentText, setCommentText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -232,19 +233,25 @@ export default function PostDetail() {
 
   async function submitComment(e, parentId = null) {
     e.preventDefault();
+    if (submittingComment) return;
     const text = parentId ? replyText : commentText;
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
     if (!text.trim()) { alert('내용을 입력해주세요.'); return; }
-    const { error } = await supabase.from('comments').insert({
-      post_id: id, author_id: user.id, content: text.trim(), parent_id: parentId
-    });
-    if (error) {
-      if (isBannedWordError(error)) alert(await reportBannedWordViolation(supabase, text));
-      else alert(error.message);
-      return;
+    setSubmittingComment(true);
+    try {
+      const { error } = await supabase.from('comments').insert({
+        post_id: id, author_id: user.id, content: text.trim(), parent_id: parentId
+      });
+      if (error) {
+        if (isBannedWordError(error)) alert(await reportBannedWordViolation(supabase, text));
+        else alert(error.message);
+        return;
+      }
+      if (parentId) { setReplyText(''); setReplyTo(null); } else { setCommentText(''); }
+      load();
+    } finally {
+      setSubmittingComment(false);
     }
-    if (parentId) { setReplyText(''); setReplyTo(null); } else { setCommentText(''); }
-    load();
   }
 
   function startEditComment(c) {
@@ -450,15 +457,15 @@ export default function PostDetail() {
             ))}
             {replyTo === c.id && (
               <form className="comment-form" style={{ marginLeft: 24 }} onSubmit={e => submitComment(e, c.id)}>
-                <input type="text" aria-label="답글" placeholder="답글을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} />
-                <button className="btn-primary" type="submit">등록</button>
+                <input type="text" aria-label="답글" placeholder="답글을 입력하세요" value={replyText} onChange={e => setReplyText(e.target.value)} disabled={submittingComment} />
+                <button className="btn-primary" type="submit" disabled={submittingComment}>등록</button>
               </form>
             )}
           </div>
         ))}
         <form className="comment-form" onSubmit={e => submitComment(e)}>
-          <input type="text" aria-label="댓글" placeholder={user ? '댓글을 입력하세요' : '로그인 후 댓글을 작성할 수 있습니다'} value={commentText} onChange={e => setCommentText(e.target.value)} disabled={!user} />
-          <button className="btn-primary" type="submit" disabled={!user}>등록</button>
+          <input type="text" aria-label="댓글" placeholder={user ? '댓글을 입력하세요' : '로그인 후 댓글을 작성할 수 있습니다'} value={commentText} onChange={e => setCommentText(e.target.value)} disabled={!user || submittingComment} />
+          <button className="btn-primary" type="submit" disabled={!user || submittingComment}>등록</button>
         </form>
       </div>
     </>
