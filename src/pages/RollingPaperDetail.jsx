@@ -16,6 +16,17 @@ const GRADUATION_PAPER_IDS = new Set([
   'f87bb8e5-8a09-4e56-8ac0-668c1d7ddc9d'
 ]);
 
+// 선생님들께 링크/패스키를 하나로 드리기 위한 통합 진입 페이지 (패스키: 정읍고).
+// 이 페이퍼 자체는 메시지를 받지 않고, 5개 반 롤링페이퍼로 바로 이동하는 화면만 보여준다.
+const HUB_PAPER_ID = 'a24bb060-e633-4d57-a712-f1b7231f1256';
+const HUB_LINKS = [
+  { id: '5dcc2fd1-9f7e-4ac2-997f-5d0004e97963', pk: '000301', label: '1반 선생님께' },
+  { id: '2141d98f-bff6-4d6b-9590-fce705ca58bb', pk: '000302', label: '2반 선생님께' },
+  { id: '5762e3a0-a92f-418e-b436-daf8ae0c64ed', pk: '000303', label: '3반 선생님께' },
+  { id: 'f0484365-7144-47fa-ad58-8ab033ca3fce', pk: '000304', label: '4반 선생님께' },
+  { id: 'f87bb8e5-8a09-4e56-8ac0-668c1d7ddc9d', pk: '000305', label: '모든 선생님께' }
+];
+
 function fireConfetti() {
   import('canvas-confetti').then(({ default: confetti }) => {
     const duration = 2200;
@@ -37,6 +48,7 @@ export default function RollingPaperDetail() {
   const qrCanvasRef = useRef(null);
   const audioRef = useRef(null);
   const isGraduation = GRADUATION_PAPER_IDS.has(id);
+  const isHub = id === HUB_PAPER_ID;
   const [musicPlaying, setMusicPlaying] = useState(false);
 
   const [paper, setPaper] = useState(null);
@@ -414,6 +426,20 @@ export default function RollingPaperDetail() {
           <input type="text" aria-label="패스키" placeholder="패스키 입력" value={passkeyInput} onChange={e => setPasskeyInput(e.target.value)} />
           <button className="btn-primary" type="submit">입장</button>
         </form>
+      ) : isHub ? (
+        <div className="hub-picker">
+          {HUB_LINKS.map(link => (
+            <button
+              type="button"
+              key={link.id}
+              className="hub-link-card"
+              onClick={() => navigate(`/paper/${link.id}?pk=${link.pk}`)}
+            >
+              <span>{link.label}</span>
+              <span className="hub-link-arrow">→</span>
+            </button>
+          ))}
+        </div>
       ) : (
         <>
           {!expired && (
