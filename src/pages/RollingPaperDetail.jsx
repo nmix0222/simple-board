@@ -19,6 +19,10 @@ export default function RollingPaperDetail() {
   const [messages, setMessages] = useState(null);
   const [msgContent, setMsgContent] = useState('');
   const [msgAnonymous, setMsgAnonymous] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -94,11 +98,50 @@ export default function RollingPaperDetail() {
     navigate('/');
   }
 
+  function startEdit() {
+    setEditTitle(paper.title);
+    setEditDescription(paper.description || '');
+    setEditDeadline(paper.deadline ? paper.deadline.slice(0, 16) : '');
+    setEditing(true);
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!editTitle.trim()) { alert('제목을 입력해주세요.'); return; }
+    const { error: err } = await supabase.from('rolling_papers').update({
+      title: editTitle.trim(),
+      description: editDescription.trim() || null,
+      deadline: editDeadline ? new Date(editDeadline).toISOString() : null
+    }).eq('id', id);
+    if (err) { alert(err.message); return; }
+    setEditing(false);
+    const { data } = await supabase.from('rolling_papers_public').select('*').eq('id', id).single();
+    setPaper(data || null);
+  }
+
   if (loading) return <div className="empty">불러오는 중...</div>;
   if (!paper) return <div className="empty">존재하지 않는 롤링페이퍼입니다.</div>;
 
   const canModify = user && (paper.creator_id === user.id || isAdmin);
   const expired = paper.deadline && new Date() > new Date(paper.deadline);
+
+  if (editing) {
+    return (
+      <article className="post">
+        <form onSubmit={saveEdit}>
+          <div className="row"><input type="text" placeholder="제목" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          <div className="row"><textarea placeholder="소개글 (선택)" value={editDescription} onChange={e => setEditDescription(e.target.value)} /></div>
+          <div className="row">
+            <input type="datetime-local" value={editDeadline} onChange={e => setEditDeadline(e.target.value)} title="마감일 (선택)" />
+          </div>
+          <div className="actions" style={{ gap: 8 }}>
+            <button type="button" className="btn-secondary" onClick={() => setEditing(false)}>취소</button>
+            <button type="submit" className="btn-primary">저장</button>
+          </div>
+        </form>
+      </article>
+    );
+  }
 
   return (
     <>
@@ -106,8 +149,14 @@ export default function RollingPaperDetail() {
         <div>
           <div style={{ fontSize: 17, fontWeight: 700 }}>{paper.title}</div>
           {isAdmin && <div style={{ fontSize: 12, color: 'var(--muted)' }}>관리자 권한으로 접근 중</div>}
+          {paper.deadline && <div style={{ fontSize: 12, color: 'var(--muted)' }}>마감 {formatDate(paper.deadline)}</div>}
         </div>
-        {canModify && <button type="button" className="btn-delete" onClick={handleDeletePaper}>삭제</button>}
+        {canModify && (
+          <span>
+            <button type="button" className="btn-delete" style={{ color: 'var(--accent)' }} onClick={startEdit}>수정</button>
+            <button type="button" className="btn-delete" onClick={handleDeletePaper}>삭제</button>
+          </span>
+        )}
       </div>
 
       {paper.description && <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 16 }}>{paper.description}</p>}

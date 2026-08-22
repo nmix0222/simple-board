@@ -538,6 +538,16 @@ create table admin_activity_logs (
 alter table admin_activity_logs enable row level security;
 create policy admin_logs_admin_only on admin_activity_logs for all using (is_admin()) with check (is_admin());
 
+-- ------------------------------------------------------------
+-- 14. 롤링페이퍼 예약 삭제 (마감일이 지나면 매시간 자동으로 소프트 삭제)
+-- ------------------------------------------------------------
+create extension if not exists pg_cron with schema extensions;
+select cron.schedule(
+  'expire-rolling-papers',
+  '0 * * * *',
+  $cron$ update rolling_papers set is_deleted = true where deadline is not null and deadline < now() and not is_deleted; $cron$
+);
+
 -- ============================================================
 -- 마지막 1회: 관리자 지정 (회원가입 후 아래를 직접 실행하세요)
 -- update profiles set role = 'admin'

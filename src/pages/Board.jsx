@@ -29,6 +29,7 @@ export default function Board() {
   const [color, setColor] = useState(POST_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [newPasskey, setNewPasskey] = useState(null);
+  const [deadline, setDeadline] = useState('');
 
   const isRollingPaper = categoryId === ROLLING_PAPER;
 
@@ -80,7 +81,8 @@ export default function Board() {
     setLoading(true);
     if (currentTab === '롤링페이퍼') {
       const { data, error } = await supabase.from('rolling_papers_public').select('*').order('created_at', { ascending: false });
-      if (!error) setPapers(data || []);
+      const now = Date.now();
+      if (!error) setPapers((data || []).filter(p => !p.deadline || new Date(p.deadline).getTime() > now));
       setLoading(false);
       return;
     }
@@ -139,12 +141,13 @@ export default function Board() {
           p_visibility: 'passkey',
           p_passkey: passkey,
           p_allow_anonymous: true,
-          p_deadline: null
+          p_deadline: deadline ? new Date(deadline).toISOString() : null
         });
         if (error) throw error;
         setNewPasskey(passkey);
         setTitle('');
         setContent('');
+        setDeadline('');
         loadPosts();
       } else {
         const { error } = await supabase.from('posts').insert({
@@ -176,6 +179,7 @@ export default function Board() {
     setTitle('');
     setContent('');
     setColor(POST_COLORS[0]);
+    setDeadline('');
   }
 
   if (!supabase) {
@@ -234,9 +238,19 @@ export default function Board() {
                 </div>
               )}
               {isRollingPaper && (
-                <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
-                  등록하면 6자리 패스키가 발급됩니다. 이 패스키를 아는 사람만 메시지를 남길 수 있어요.
-                </p>
+                <>
+                  <div className="row">
+                    <input
+                      type="datetime-local"
+                      value={deadline}
+                      onChange={e => setDeadline(e.target.value)}
+                      title="마감일 (선택) — 지나면 자동으로 정리됩니다"
+                    />
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
+                    마감일을 선택하면 지난 뒤 새 메시지 작성이 막히고, 목록에서도 자동으로 정리됩니다 (선택 안 하면 계속 유지). 등록하면 6자리 패스키가 발급되며, 이 패스키를 아는 사람만 메시지를 남길 수 있어요.
+                  </p>
+                </>
               )}
               {!user && (
                 <p style={{ fontSize: 12, color: 'var(--danger)', margin: '4px 2px 8px' }}>
