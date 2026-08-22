@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import { formatDateTime as formatDate } from '../lib/format.js';
@@ -10,6 +10,9 @@ export default function RollingPaperDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, isAdmin } = useSupabaseAuth();
+  const [searchParams] = useSearchParams();
+  const wallRef = useRef(null);
+  const qrCanvasRef = useRef(null);
 
   const [paper, setPaper] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,21 +26,32 @@ export default function RollingPaperDetail() {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
+  const [showQr, setShowQr] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setUnlocked(false);
     setPaper(null);
     setMessages(null);
-    setPasskeyInput('');
     setError('');
-    supabase.from('rolling_papers_public').select('*').eq('id', id).single().then(({ data }) => {
+    const prefill = searchParams.get('pk') || '';
+    setPasskeyInput(prefill);
+
+    supabase.from('rolling_papers_public').select('*').eq('id', id).single().then(async ({ data }) => {
       setPaper(data || null);
       setLoading(false);
-      if (data && (data.visibility === 'public' || isAdmin)) {
+      if (!data) return;
+      if (data.visibility === 'public' || isAdmin) {
         setUnlocked(true);
+        return;
+      }
+      if (prefill) {
+        const { data: ok } = await supabase.rpc('verify_rolling_paper_passkey', { p_paper_id: id, p_passkey: prefill.trim().toUpperCase() });
+        if (ok) setUnlocked(true);
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isAdmin]);
 
   useEffect(() => {
@@ -45,6 +59,14 @@ export default function RollingPaperDetail() {
     loadMessages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlocked, id]);
+
+  useEffect(() => {
+    if (!showQr || !qrCanvasRef.current || !paper) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}#/paper/${id}?pk=${encodeURIComponent(passkeyInput.trim().toUpperCase())}`;
+    import('qrcode').then(({ default: QRCode }) => {
+      if (qrCanvasRef.current) QRCode.toCanvas(qrCanvasRef.current, shareUrl, { width: 200, margin: 1 }).catch(() => {});
+    });
+  }, [showQr, paper, id, passkeyInput]);
 
   async function loadMessages() {
     const { data } = await supabase
@@ -121,6 +143,31 @@ export default function RollingPaperDetail() {
     setPaper(data || null);
   }
 
+  async function handleExportPdf() {
+    if (!wallRef.current) return;
+    setExporting(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf')
+      ]);
+      const canvas = await html2canvas(wallRef.current, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = pageWidth - 40;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.setFontSize(16);
+      pdf.text(paper.title, 20, 30);
+      pdf.addImage(imgData, 'PNG', 20, 45, imgWidth, imgHeight);
+      pdf.save(`${paper.title}.pdf`);
+    } catch (e) {
+      alert('PDF 생성에 실패했습니다: ' + e.message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading) return <div className="empty">불러오는 중...</div>;
   if (!paper) return <div className="empty">존재하지 않는 롤링페이퍼입니다.</div>;
 
@@ -191,7 +238,22 @@ export default function RollingPaperDetail() {
           )}
           {expired && <div className="callout" style={{ marginBottom: 16, fontSize: 13, color: 'var(--muted)' }}>마감된 롤링페이퍼입니다. 더 이상 메시지를 남길 수 없습니다.</div>}
 
-          <div className="message-wall">
+          <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+            <button type="button" className="btn-secondary" onClick={() => setShowQr(s => !s)} style={{ width: 'auto' }}>
+              {showQr ? 'QR코드 닫기' : '📱 QR코드로 공유'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={handleExportPdf} disabled={exporting} style={{ width: 'auto' }}>
+              {exporting ? '생성 중...' : '📄 PDF로 저장'}
+            </button>
+          </div>
+          {showQr && (
+            <div style={{ textAlign: 'center', padding: 16, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 16 }}>
+              <canvas ref={qrCanvasRef} />
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>이 QR코드를 스캔하면 패스키 입력 없이 바로 들어올 수 있어요.</div>
+            </div>
+          )}
+
+          <div className="message-wall" ref={wallRef}>
             {messages === null ? null : messages.length === 0 ? (
               <div className="empty">아직 남겨진 메시지가 없습니다.</div>
             ) : (
