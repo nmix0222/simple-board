@@ -41,6 +41,9 @@ drop function if exists bump_post_vote_counts() cascade;
 drop function if exists create_rolling_paper(text, uuid, text, text, text, text, boolean, timestamptz) cascade;
 drop function if exists verify_rolling_paper_passkey(uuid, text) cascade;
 drop function if exists can_access_rolling_paper(uuid) cascade;
+drop function if exists check_rolling_paper_access(uuid, text) cascade;
+drop function if exists get_rolling_paper_messages(uuid, text) cascade;
+drop function if exists get_rolling_paper_message_replies(uuid, text) cascade;
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text) cascade;
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text, text) cascade;
 drop function if exists enforce_post_content_rules() cascade;
@@ -799,7 +802,10 @@ create view rolling_paper_messages_public as
   from rolling_paper_messages m
   where not m.is_deleted or is_admin() or m.author_id = auth.uid();
 
-grant select on rolling_paper_messages_public to anon, authenticated;
+-- 이 뷰 자체엔 패스키/공개여부 확인이 전혀 없다(is_deleted만 거름). 그래서 직접 select 권한을 주면
+-- 안 되고, 반드시 아래 check_rolling_paper_access()로 패스키를 검증하는 get_rolling_paper_messages()
+-- RPC를 통해서만 조회하게 한다. (직접 조회 시 패스키 없이 전체 내용이 노출되는 심각한 결함이 있었음)
+revoke select on rolling_paper_messages_public from anon, authenticated;
 
 create function post_rolling_paper_message(
   p_paper_id uuid, p_content text, p_is_anonymous boolean,
@@ -936,7 +942,75 @@ create view rolling_paper_message_comments_public as
   from rolling_paper_message_comments c
   where not c.is_deleted;
 
-grant select on rolling_paper_message_comments_public to anon, authenticated;
+-- 메시지 뷰와 같은 이유로 직접 select 권한을 주지 않고, get_rolling_paper_message_replies() RPC로만 조회.
+revoke select on rolling_paper_message_comments_public from anon, authenticated;
+
+-- 패스키로 보호된 롤링페이퍼의 메시지/답장을 조회할 자격이 있는지 확인 (공개 페이퍼/관리자/작성자/올바른 패스키).
+-- 이미 검증된 패스키로 반복 조회하는 정상적인 경우는 시도 횟수에 반영하지 않고, 틀린 시도만 반영해
+-- verify_rolling_paper_passkey()와 동일한 무차별 대입 방지 예산을 공유한다.
+create function check_rolling_paper_access(p_paper_id uuid, p_passkey text default null) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_paper rolling_papers%rowtype;
+  v_recent_attempts integer;
+  v_ok boolean;
+begin
+  select * into v_paper from rolling_papers where id = p_paper_id and not is_deleted;
+  if v_paper.id is null then
+    return false;
+  end if;
+  if v_paper.visibility = 'public' then
+    return true;
+  end if;
+  if is_admin() then
+    return true;
+  end if;
+  if auth.uid() is not null and auth.uid() = v_paper.creator_id then
+    return true;
+  end if;
+
+  select count(*) into v_recent_attempts from rolling_paper_verify_attempts
+    where paper_id = p_paper_id and created_at > now() - interval '1 minute';
+  if v_recent_attempts >= 10 then
+    return false;
+  end if;
+
+  v_ok := (v_paper.visibility = 'passkey' and v_paper.passkey_hash = encode(digest(coalesce(p_passkey, ''), 'sha256'), 'hex'));
+  if not v_ok then
+    insert into rolling_paper_verify_attempts (paper_id) values (p_paper_id);
+  end if;
+  return v_ok;
+end;
+$$;
+grant execute on function check_rolling_paper_access(uuid, text) to anon, authenticated;
+
+create function get_rolling_paper_messages(p_paper_id uuid, p_passkey text default null)
+returns setof rolling_paper_messages_public
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not check_rolling_paper_access(p_paper_id, p_passkey) then
+    return;
+  end if;
+  return query select * from rolling_paper_messages_public where rolling_paper_id = p_paper_id order by created_at asc;
+end;
+$$;
+grant execute on function get_rolling_paper_messages(uuid, text) to anon, authenticated;
+
+create function get_rolling_paper_message_replies(p_paper_id uuid, p_passkey text default null)
+returns setof rolling_paper_message_comments_public
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not check_rolling_paper_access(p_paper_id, p_passkey) then
+    return;
+  end if;
+  return query
+    select c.* from rolling_paper_message_comments_public c
+    join rolling_paper_messages m on m.id = c.message_id
+    where m.rolling_paper_id = p_paper_id
+    order by c.created_at asc;
+end;
+$$;
+grant execute on function get_rolling_paper_message_replies(uuid, text) to anon, authenticated;
 
 -- ------------------------------------------------------------
 -- 9. reports

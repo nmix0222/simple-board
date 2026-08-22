@@ -10,7 +10,8 @@ import { CATEGORY_HUES, gradientFor } from '../lib/categoryTheme.js';
 import { isBannedWordError, reportBannedWordViolation } from '../lib/bannedWordPenalty.js';
 import AdSlot from '../components/AdSlot.jsx';
 
-const DRAFT_KEY = 'post-draft';
+// 같은 브라우저를 여러 사람이 쓸 수 있으므로(공용 PC 등) 임시저장은 사용자별로 분리해서 저장한다.
+const draftKey = userId => `post-draft:${userId}`;
 
 // 정읍고 통합 페이지(허브)로만 안내하기 위해, 게시판 목록에는 개별 반/전체선생님 롤링페이퍼를
 // 노출하지 않는다. 데이터/메시지/직접 링크는 전혀 건드리지 않고 목록 표시에서만 제외한다.
@@ -98,22 +99,22 @@ export default function Board() {
 
   // 임시저장 불러오기 (글쓰기 창을 처음 열 때)
   useEffect(() => {
-    if (!showWriteForm) return;
+    if (!showWriteForm || !user) return;
     try {
-      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      const saved = JSON.parse(localStorage.getItem(draftKey(user.id)) || 'null');
       if (saved && saved.title) {
         setTitle(saved.title);
         setContent(saved.content || '');
       }
     } catch (e) { /* ignore */ }
-  }, [showWriteForm]);
+  }, [showWriteForm, user]);
 
   // 임시저장 (제목/내용이 바뀔 때마다)
   useEffect(() => {
-    if (!showWriteForm || isRollingPaper) return;
+    if (!showWriteForm || isRollingPaper || !user) return;
     const t = setTimeout(() => {
       if (title.trim() || content.trim()) {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content }));
+        localStorage.setItem(draftKey(user.id), JSON.stringify({ title, content }));
       }
     }, 500);
     return () => clearTimeout(t);
@@ -255,7 +256,7 @@ export default function Board() {
         });
         if (error) throw error;
         uploadedImagePath = null;
-        localStorage.removeItem(DRAFT_KEY);
+        localStorage.removeItem(draftKey(user.id));
         setTitle('');
         setContent('');
         setColor(POST_COLORS[0]);

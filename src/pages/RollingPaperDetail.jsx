@@ -135,30 +135,30 @@ export default function RollingPaperDetail() {
     setMusicPlaying(p => !p);
   }
 
+  // 관리자가 패스키를 직접 입력하지 않고(권한으로) 들어온 경우엔 실제 패스키 값을 알 수 없다
+  // (해시로만 저장됨) — 그런 경우 QR에 pk를 억지로 채워 넣으면 아무 값도 없는 빈 패스키가 되어
+  // 스캔해도 다시 패스키 입력 화면만 나오는 깨진 링크가 만들어졌다.
+  const qrHasPasskey = paper?.visibility === 'public' || !!passkeyInput.trim();
+
   useEffect(() => {
     if (!showQr || !qrCanvasRef.current || !paper) return;
-    const shareUrl = `${window.location.origin}${window.location.pathname}#/paper/${id}?pk=${encodeURIComponent(passkeyInput.trim().toUpperCase())}`;
+    const shareUrl = qrHasPasskey
+      ? `${window.location.origin}${window.location.pathname}#/paper/${id}?pk=${encodeURIComponent(passkeyInput.trim().toUpperCase())}`
+      : `${window.location.origin}${window.location.pathname}#/paper/${id}`;
     import('qrcode').then(({ default: QRCode }) => {
       if (qrCanvasRef.current) QRCode.toCanvas(qrCanvasRef.current, shareUrl, { width: 200, margin: 1 }).catch(() => {});
     });
-  }, [showQr, paper, id, passkeyInput]);
+  }, [showQr, paper, id, passkeyInput, qrHasPasskey]);
 
   async function loadMessages() {
-    const { data } = await supabase
-      .from('rolling_paper_messages_public')
-      .select('*')
-      .eq('rolling_paper_id', id)
-      .order('created_at', { ascending: true });
+    const pk = passkeyInput.trim() ? passkeyInput.trim().toUpperCase() : null;
+    const { data } = await supabase.rpc('get_rolling_paper_messages', { p_paper_id: id, p_passkey: pk });
     const rows = data || [];
     const authorIds = [...new Set(rows.map(m => m.author_id).filter(Boolean))];
 
     let commentsByMessage = {};
     if (rows.length) {
-      const { data: comments } = await supabase
-        .from('rolling_paper_message_comments_public')
-        .select('*')
-        .in('message_id', rows.map(m => m.id))
-        .order('created_at', { ascending: true });
+      const { data: comments } = await supabase.rpc('get_rolling_paper_message_replies', { p_paper_id: id, p_passkey: pk });
       const commentAuthorIds = [...new Set((comments || []).map(c => c.author_id).filter(Boolean))];
       let commentNameMap = {};
       if (commentAuthorIds.length) {
@@ -390,9 +390,25 @@ export default function RollingPaperDetail() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const imgWidth = pageWidth - 40;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.setFontSize(16);
-      pdf.text(paper.title, 20, 30);
-      pdf.addImage(imgData, 'PNG', 20, 45, imgWidth, imgHeight);
+
+      // jsPDF 기본 폰트(Helvetica)엔 한글 글리프가 없어 제목이 빈 칸/네모로 나온다.
+      // 브라우저 Canvas로 제목을 이미지로 그려서 넣는 방식으로 우회한다 (별도 한글 폰트 파일 내장 불필요).
+      const titleHeightPt = 30;
+      const titleScale = 3;
+      const titleCanvas = document.createElement('canvas');
+      titleCanvas.width = imgWidth * titleScale;
+      titleCanvas.height = titleHeightPt * titleScale;
+      const tctx = titleCanvas.getContext('2d');
+      tctx.scale(titleScale, titleScale);
+      tctx.fillStyle = '#ffffff';
+      tctx.fillRect(0, 0, imgWidth, titleHeightPt);
+      tctx.fillStyle = '#000000';
+      tctx.font = 'bold 18px sans-serif';
+      tctx.textBaseline = 'middle';
+      tctx.fillText(paper.title, 0, titleHeightPt / 2);
+
+      pdf.addImage(titleCanvas.toDataURL('image/png'), 'PNG', 20, 12, imgWidth, titleHeightPt);
+      pdf.addImage(imgData, 'PNG', 20, 12 + titleHeightPt + 5, imgWidth, imgHeight);
       pdf.save(`${paper.title}.pdf`);
     } catch (e) {
       alert('PDF 생성에 실패했습니다: ' + e.message);
@@ -468,7 +484,9 @@ export default function RollingPaperDetail() {
           {showQr && (
             <div style={{ textAlign: 'center', padding: 16, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 16 }}>
               <canvas ref={qrCanvasRef} />
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>이 QR코드를 스캔하면 패스키 입력 없이 바로 반 선택 화면으로 들어올 수 있어요.</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+                {qrHasPasskey ? '이 QR코드를 스캔하면 패스키 입력 없이 바로 반 선택 화면으로 들어올 수 있어요.' : '이 QR코드를 스캔하면 반 선택 화면으로 이동해요. 패스키는 직접 입력해야 합니다 (관리자 화면이라 실제 패스키가 포함되지 않았어요).'}
+              </div>
             </div>
           )}
           <div className="hub-picker">
@@ -524,7 +542,9 @@ export default function RollingPaperDetail() {
           {showQr && (
             <div style={{ textAlign: 'center', padding: 16, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 16 }}>
               <canvas ref={qrCanvasRef} />
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>이 QR코드를 스캔하면 패스키 입력 없이 바로 들어올 수 있어요.</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+                {qrHasPasskey ? '이 QR코드를 스캔하면 패스키 입력 없이 바로 들어올 수 있어요.' : '이 QR코드를 스캔하면 이 페이지로 이동해요. 패스키는 직접 입력해야 합니다 (관리자 화면이라 실제 패스키가 포함되지 않았어요).'}
+              </div>
             </div>
           )}
 

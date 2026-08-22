@@ -36,6 +36,12 @@ export function SupabaseAuthProvider({ children }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       loadProfile(newSession?.user?.id);
+      // 비밀번호 재설정 링크로 들어오면 세션이 여기서 확립된다. redirectTo에 해시 경로(#/update-password)를
+      // 미리 넣어두면 Supabase가 붙이는 #access_token=...과 #이 두 번 겹쳐서 HashRouter가 토큰을 못 읽는
+      // 문제가 있어, redirectTo는 순수 루트로 두고 이 이벤트로 화면을 전환한다.
+      if (_event === 'PASSWORD_RECOVERY') {
+        window.location.hash = '/update-password';
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -69,8 +75,9 @@ export function SupabaseAuthProvider({ children }) {
   }
 
   async function sendPasswordReset(email) {
+    // redirectTo는 해시 경로 없이 순수 루트로 둔다 (이유: onAuthStateChange의 PASSWORD_RECOVERY 처리 참고).
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}${window.location.pathname}#/update-password`
+      redirectTo: `${window.location.origin}${window.location.pathname}`
     });
     if (error) throw error;
   }

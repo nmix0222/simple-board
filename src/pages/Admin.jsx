@@ -35,6 +35,7 @@ export default function Admin() {
   const [members, setMembers] = useState([]);
   const [bannedWords, setBannedWords] = useState([]);
   const [newBannedWord, setNewBannedWord] = useState('');
+  const [newBannedWordSeverity, setNewBannedWordSeverity] = useState('warning');
   const [logs, setLogs] = useState([]);
   const [logAdminNames, setLogAdminNames] = useState({});
   const [categories, setCategories] = useState([]);
@@ -227,19 +228,21 @@ export default function Admin() {
     e.preventDefault();
     const word = newBannedWord.trim();
     if (!word) return;
-    const { data, error } = await supabase.from('banned_words').insert({ word, created_by: user.id }).select().single();
+    const { data, error } = await supabase.from('banned_words').insert({ word, severity: newBannedWordSeverity, created_by: user.id }).select().single();
     if (error) {
       alert(error.message.includes('duplicate') ? '이미 등록된 금칙어입니다.' : error.message);
       return;
     }
-    await logAdmin('add_banned_word', 'banned_word', data.id, { word });
+    await logAdmin('add_banned_word', 'banned_word', data.id, { word, severity: newBannedWordSeverity });
     setNewBannedWord('');
+    setNewBannedWordSeverity('warning');
     loadBannedWords();
   }
 
   async function deleteBannedWord(bw) {
     if (!confirm(`"${bw.word}" 금칙어를 삭제하시겠습니까?`)) return;
-    await supabase.from('banned_words').delete().eq('id', bw.id);
+    const { error: err } = await supabase.from('banned_words').delete().eq('id', bw.id);
+    if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
     await logAdmin('delete_banned_word', 'banned_word', bw.id, { word: bw.word });
     loadBannedWords();
   }
@@ -486,7 +489,13 @@ export default function Admin() {
               등록된 단어가 포함된 게시글·댓글·롤링페이퍼 메시지는 서버에서 등록이 차단됩니다.
             </p>
             <form onSubmit={addBannedWord}>
-              <div className="row"><input type="text" aria-label="금칙어" placeholder="금칙어 입력" value={newBannedWord} onChange={e => setNewBannedWord(e.target.value)} /></div>
+              <div className="row">
+                <input type="text" aria-label="금칙어" placeholder="금칙어 입력" value={newBannedWord} onChange={e => setNewBannedWord(e.target.value)} />
+                <select aria-label="심각도" value={newBannedWordSeverity} onChange={e => setNewBannedWordSeverity(e.target.value)} style={{ maxWidth: 160 }}>
+                  <option value="warning">경고</option>
+                  <option value="ban">즉시 이용정지</option>
+                </select>
+              </div>
               <div className="actions"><button className="btn-primary" type="submit">추가</button></div>
             </form>
           </section>
@@ -495,6 +504,9 @@ export default function Admin() {
               {bannedWords.map(bw => (
                 <span key={bw.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 12px', fontSize: 13 }}>
                   {bw.word}
+                  <span style={{ fontSize: 11, color: bw.severity === 'ban' ? 'var(--danger)' : 'var(--muted)' }}>
+                    {bw.severity === 'ban' ? '즉시정지' : '경고'}
+                  </span>
                   <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => deleteBannedWord(bw)}>✕</button>
                 </span>
               ))}
