@@ -336,6 +336,7 @@ create function create_rolling_paper(
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id uuid;
+  v_row rolling_papers_public;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다';
@@ -347,7 +348,8 @@ begin
     p_allow_anonymous, p_deadline
   )
   returning id into v_id;
-  return (select * from rolling_papers_public where id = v_id);
+  select * into v_row from rolling_papers_public where id = v_id;
+  return v_row;
 end;
 $$;
 grant execute on function create_rolling_paper(text, uuid, text, text, text, text, boolean, timestamptz) to authenticated;
@@ -410,6 +412,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_paper rolling_papers%rowtype;
   v_id uuid;
+  v_row rolling_paper_messages_public;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다';
@@ -435,7 +438,8 @@ begin
   values (p_paper_id, auth.uid(), p_content, p_is_anonymous)
   returning id into v_id;
 
-  return (select * from rolling_paper_messages_public where id = v_id);
+  select * into v_row from rolling_paper_messages_public where id = v_id;
+  return v_row;
 end;
 $$;
 grant execute on function post_rolling_paper_message(uuid, text, boolean, text) to authenticated;
