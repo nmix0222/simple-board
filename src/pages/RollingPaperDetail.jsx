@@ -288,7 +288,7 @@ export default function RollingPaperDetail() {
               <form onSubmit={handleAddMessage}>
                 {!msgAnonymous && (
                   <div className="row">
-                    <input type="text" placeholder="이름" value={msgName} onChange={e => setMsgName(e.target.value)} style={{ maxWidth: 160 }} />
+                    <input type="text" placeholder="학번 이름 (예: 0315 홍길동)" value={msgName} onChange={e => setMsgName(e.target.value)} style={{ maxWidth: 200 }} />
                   </div>
                 )}
                 <div className="row">
