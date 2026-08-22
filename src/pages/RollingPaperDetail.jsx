@@ -456,7 +456,7 @@ export default function RollingPaperDetail() {
                 type="button"
                 key={link.id}
                 className="hub-link-card"
-                onClick={() => navigate(`/paper/${link.id}?pk=${encodeURIComponent(link.pk)}`)}
+                onClick={() => navigate(`/paper/${link.id}`)}
               >
                 <span>{link.label}</span>
                 <span className="hub-link-arrow">→</span>
