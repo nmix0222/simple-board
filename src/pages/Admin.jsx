@@ -70,7 +70,7 @@ export default function Admin() {
     const [postsRes, commentsRes, membersRes, pendingReportsRes] = await Promise.all([
       supabase.from('posts').select('*', { count: 'exact', head: true }).eq('is_deleted', false),
       supabase.from('comments').select('*', { count: 'exact', head: true }).eq('is_deleted', false),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
       supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'pending')
     ]);
     setStats({
