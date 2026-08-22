@@ -9,6 +9,7 @@
 drop view if exists rolling_paper_message_comments_public cascade;
 drop view if exists rolling_paper_messages_public cascade;
 drop view if exists rolling_papers_public cascade;
+drop table if exists banned_words cascade;
 drop table if exists admin_activity_logs cascade;
 drop table if exists user_restrictions cascade;
 drop table if exists notices cascade;
@@ -37,6 +38,11 @@ drop function if exists verify_rolling_paper_passkey(uuid, text) cascade;
 drop function if exists can_access_rolling_paper(uuid) cascade;
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text) cascade;
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text, text) cascade;
+drop function if exists enforce_post_content_rules() cascade;
+drop function if exists enforce_comment_content_rules() cascade;
+drop function if exists log_admin_action(text, text, uuid, jsonb) cascade;
+drop function if exists restrict_user(uuid, text, text, timestamptz) cascade;
+drop function if exists unrestrict_user(uuid) cascade;
 drop trigger if exists on_auth_user_created on auth.users;
 
 -- Supabase는 보통 pgcrypto를 extensions 스키마에 설치한다. 아래 함수들의
@@ -123,6 +129,18 @@ insert into categories (name, slug, sort_order) values
   ('스포츠', 'sports', 10);
 
 -- ------------------------------------------------------------
+-- 2b. banned_words (금칙어 관리 — posts/comments/rolling_paper_messages 작성 시 서버에서 검사)
+-- ------------------------------------------------------------
+create table banned_words (
+  id uuid primary key default gen_random_uuid(),
+  word text not null unique,
+  created_by uuid references profiles(id),
+  created_at timestamptz not null default now()
+);
+alter table banned_words enable row level security;
+create policy banned_words_admin_only on banned_words for all using (is_admin()) with check (is_admin());
+
+-- ------------------------------------------------------------
 -- 3. posts
 -- ------------------------------------------------------------
 create table posts (
@@ -182,6 +200,43 @@ language sql security definer set search_path = public, extensions as $$
 $$;
 grant execute on function increment_post_view(uuid) to anon, authenticated;
 
+-- 금칙어 + 등록 속도 제한(20초, 관리자는 예외) + URL 도배 방지
+create function enforce_post_content_rules() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_recent_count integer;
+  v_bad_word text;
+  v_url_count integer;
+begin
+  if tg_op = 'INSERT' and not is_admin() then
+    select count(*) into v_recent_count from posts
+      where author_id = new.author_id and created_at > now() - interval '20 seconds';
+    if v_recent_count > 0 then
+      raise exception '너무 빠르게 게시글을 등록했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+  end if;
+
+  select word into v_bad_word from banned_words
+    where new.title ilike '%' || word || '%' or new.content ilike '%' || word || '%'
+    limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 등록할 수 없습니다.';
+  end if;
+
+  v_url_count := (length(new.content) - length(replace(lower(new.content), 'http://', '')))/7
+               + (length(new.content) - length(replace(lower(new.content), 'https://', '')))/8;
+  if v_url_count > 3 and not is_admin() then
+    raise exception '링크(URL)를 너무 많이 포함하고 있습니다.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger posts_enforce_rules
+  before insert or update of title, content on posts
+  for each row execute function enforce_post_content_rules();
+
 -- ------------------------------------------------------------
 -- 4. comments
 -- ------------------------------------------------------------
@@ -237,6 +292,36 @@ create policy comments_select_public on comments for select using (not is_delete
 create policy comments_insert_own on comments for insert with check (auth.uid() is not null and author_id = auth.uid());
 create policy comments_update_own_or_admin on comments for update using (author_id = auth.uid() or is_admin());
 create policy comments_delete_admin_only on comments for delete using (is_admin());
+
+-- 금칙어 + 등록 속도 제한(5초, 관리자는 예외)
+create function enforce_comment_content_rules() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_recent_count integer;
+  v_bad_word text;
+begin
+  if tg_op = 'INSERT' and not is_admin() then
+    select count(*) into v_recent_count from comments
+      where author_id = new.author_id and created_at > now() - interval '5 seconds';
+    if v_recent_count > 0 then
+      raise exception '너무 빠르게 댓글을 등록했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+  end if;
+
+  select word into v_bad_word from banned_words
+    where new.content ilike '%' || word || '%'
+    limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 등록할 수 없습니다.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger comments_enforce_rules
+  before insert or update of content on comments
+  for each row execute function enforce_comment_content_rules();
 
 -- ------------------------------------------------------------
 -- 5. post_likes (추천/비추천 — value: 1=추천, -1=비추천)
@@ -442,6 +527,7 @@ declare
   v_paper rolling_papers%rowtype;
   v_id uuid;
   v_row rolling_paper_messages_public;
+  v_bad_word text;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다';
@@ -461,6 +547,11 @@ begin
     if p_passkey is null or encode(digest(p_passkey, 'sha256'), 'hex') <> v_paper.passkey_hash then
       raise exception '패스키가 올바르지 않습니다';
     end if;
+  end if;
+
+  select word into v_bad_word from banned_words where p_content ilike '%' || word || '%' limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 등록할 수 없습니다';
   end if;
 
   insert into rolling_paper_messages (rolling_paper_id, author_id, content, is_anonymous, display_name)
@@ -593,6 +684,51 @@ create table admin_activity_logs (
 );
 alter table admin_activity_logs enable row level security;
 create policy admin_logs_admin_only on admin_activity_logs for all using (is_admin()) with check (is_admin());
+
+-- 관리자 작업을 admin_activity_logs에 실제로 남기기 위한 RPC (Admin.jsx에서 호출)
+create function log_admin_action(p_action text, p_target_type text, p_target_id uuid, p_detail jsonb default null)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not is_admin() then
+    raise exception '관리자만 사용할 수 있습니다';
+  end if;
+  insert into admin_activity_logs (admin_id, action, target_type, target_id, detail)
+  values (auth.uid(), p_action, p_target_type, p_target_id, p_detail);
+end;
+$$;
+grant execute on function log_admin_action(text, text, uuid, jsonb) to authenticated;
+
+-- 회원 경고/이용정지: user_restrictions에 기록하고, 정지(suspension)면 profiles.status도 함께 갱신
+create function restrict_user(p_user_id uuid, p_type text, p_reason text, p_expires_at timestamptz default null)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not is_admin() then
+    raise exception '관리자만 사용할 수 있습니다';
+  end if;
+  insert into user_restrictions (user_id, admin_id, type, reason, expires_at)
+  values (p_user_id, auth.uid(), p_type, p_reason, p_expires_at);
+  if p_type = 'suspension' then
+    update profiles set status = 'restricted' where id = p_user_id;
+  end if;
+end;
+$$;
+grant execute on function restrict_user(uuid, text, text, timestamptz) to authenticated;
+
+create function unrestrict_user(p_user_id uuid)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if not is_admin() then
+    raise exception '관리자만 사용할 수 있습니다';
+  end if;
+  update profiles set status = 'active' where id = p_user_id;
+  insert into admin_activity_logs (admin_id, action, target_type, target_id)
+  values (auth.uid(), 'unrestrict_user', 'profile', p_user_id);
+end;
+$$;
+grant execute on function unrestrict_user(uuid) to authenticated;
 
 -- ------------------------------------------------------------
 -- 14. 롤링페이퍼 예약 삭제 (마감일이 지나면 매시간 자동으로 소프트 삭제)
