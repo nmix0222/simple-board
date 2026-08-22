@@ -90,10 +90,12 @@ export default function RollingPaperDetail() {
 
   async function handleDeletePaper() {
     if (!confirm('이 롤링페이퍼를 삭제하시겠습니까?')) return;
-    if (isAdmin) {
-      await supabase.from('rolling_papers').delete().eq('id', id);
-    } else {
-      await supabase.from('rolling_papers').update({ is_deleted: true }).eq('id', id);
+    const { error: err } = isAdmin
+      ? await supabase.from('rolling_papers').delete().eq('id', id)
+      : await supabase.from('rolling_papers').update({ is_deleted: true }).eq('id', id);
+    if (err) {
+      alert('삭제에 실패했습니다: ' + err.message);
+      return;
     }
     navigate('/');
   }

@@ -1,8 +1,8 @@
 :root {
-  --bg: #eef1f8;
-  --bg-gradient: radial-gradient(circle at 15% 0%, #e7ecfb 0%, transparent 45%),
-    radial-gradient(circle at 100% 20%, #fdeef6 0%, transparent 40%),
-    linear-gradient(180deg, #f2f4fa 0%, #eef1f8 100%);
+  --bg: #f5f2fa;
+  --bg-gradient: radial-gradient(circle at 15% 0%, hsl(265 78% 93%) 0%, transparent 48%),
+    radial-gradient(circle at 100% 15%, hsl(310 70% 91%) 0%, transparent 42%),
+    linear-gradient(180deg, hsl(265 45% 97%) 0%, hsl(265 35% 95%) 100%);
   --card: #ffffff;
   --card-alt: #eaf0ff;
   --border: #e2e4e9;
@@ -17,10 +17,10 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #14161c;
-  --bg-gradient: radial-gradient(circle at 15% 0%, #1c2340 0%, transparent 45%),
-    radial-gradient(circle at 100% 20%, #2a1c2e 0%, transparent 40%),
-    linear-gradient(180deg, #16181f 0%, #101218 100%);
+  --bg: #14121a;
+  --bg-gradient: radial-gradient(circle at 15% 0%, hsl(265 55% 16%) 0%, transparent 48%),
+    radial-gradient(circle at 100% 15%, hsl(310 50% 14%) 0%, transparent 42%),
+    linear-gradient(180deg, hsl(265 22% 9%) 0%, hsl(265 18% 7%) 100%);
   --card: #1c1f28;
   --card-alt: #232a3d;
   --border: #2d313d;

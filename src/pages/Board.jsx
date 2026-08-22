@@ -2,15 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
+import { useTheme } from '../ThemeContext.jsx';
 import { generatePasskey } from '../hash.js';
 import { formatDateTime as formatDate, excerpt } from '../lib/format.js';
 import { TAGS, POST_COLORS, ROLLING_PAPER } from '../lib/constants.js';
+import { CATEGORY_HUES, gradientFor } from '../lib/categoryTheme.js';
 import AdSlot from '../components/AdSlot.jsx';
 
 const DRAFT_KEY = 'post-draft';
 
 export default function Board() {
   const { user } = useSupabaseAuth();
+  const { theme } = useTheme();
   const [categories, setCategories] = useState([]);
   const [posts, setPosts] = useState([]);
   const [papers, setPapers] = useState([]);
@@ -54,6 +57,15 @@ export default function Board() {
     setVisibleCount(20);
   }, [currentTab, search, sortMode]);
 
+  // 분야별로 배경 색조를 은은하게 바꿔서 낭만적인 분위기를 준다
+  useEffect(() => {
+    const hue = CATEGORY_HUES[currentTab] ?? CATEGORY_HUES['전체'];
+    document.documentElement.style.setProperty('--bg-gradient', gradientFor(hue, theme === 'dark'));
+    return () => {
+      document.documentElement.style.removeProperty('--bg-gradient');
+    };
+  }, [currentTab, theme]);
+
   // 다른 사람이 글을 쓰거나 삭제하면 실시간으로 목록에 반영 (새로고침 불필요)
   const loadPostsRef = useRef(loadPosts);
   loadPostsRef.current = loadPosts;
@@ -94,7 +106,7 @@ export default function Board() {
   async function loadPosts() {
     setLoading(true);
     if (currentTab === '롤링페이퍼') {
-      const { data, error } = await supabase.from('rolling_papers_public').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('rolling_papers_public').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
       const now = Date.now();
       if (!error) setPapers((data || []).filter(p => !p.deadline || new Date(p.deadline).getTime() > now));
       setLoading(false);
