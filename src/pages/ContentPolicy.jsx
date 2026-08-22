@@ -1,4 +1,7 @@
+import { useDocumentMeta } from '../lib/useDocumentMeta.js';
+
 export default function ContentPolicy() {
+  useDocumentMeta('콘텐츠 정책', '간단 게시판에서 허용되지 않는 콘텐츠와 신고 처리 절차를 안내합니다.');
   return (
     <div className="content-page">
       <h2>콘텐츠 정책</h2>

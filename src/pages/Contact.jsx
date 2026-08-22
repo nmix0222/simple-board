@@ -1,4 +1,7 @@
+import { useDocumentMeta } from '../lib/useDocumentMeta.js';
+
 export default function Contact() {
+  useDocumentMeta('문의하기', '계정, 신고, 버그 제보 등 운영자에게 문의하는 방법을 안내합니다.');
   return (
     <div className="content-page">
       <h2>문의하기</h2>

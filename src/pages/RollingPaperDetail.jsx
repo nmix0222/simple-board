@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import { formatDateTime as formatDate } from '../lib/format.js';
+import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 
 const CARD_COLORS = ['#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5'];
 
@@ -58,6 +59,8 @@ export default function RollingPaperDetail() {
   const [replyAnonymous, setReplyAnonymous] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [printMode, setPrintMode] = useState(false);
+
+  useDocumentMeta(paper?.title, paper?.description || '롤링페이퍼에 마음을 담은 메시지를 남겨보세요.');
 
   useEffect(() => {
     setLoading(true);

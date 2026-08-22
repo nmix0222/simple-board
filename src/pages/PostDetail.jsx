@@ -3,8 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import ReportButton from '../components/ReportButton.jsx';
-import { formatDateTime as formatDate } from '../lib/format.js';
+import { formatDateTime as formatDate, excerpt } from '../lib/format.js';
 import { TAGS, POST_COLORS } from '../lib/constants.js';
+import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 
 const VIEWED_KEY = 'viewed-posts';
 
@@ -34,6 +35,8 @@ export default function PostDetail() {
   const [copied, setCopied] = useState(false);
 
   const canModify = post && user && (post.author_id === user.id || isAdmin);
+
+  useDocumentMeta(post?.title, post?.content ? excerpt(post.content, 100) : undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
