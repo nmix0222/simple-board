@@ -1,24 +1,26 @@
+import { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import Footer from './components/Footer.jsx';
 import WelcomeGate from './components/WelcomeGate.jsx';
 import Board from './pages/Board.jsx';
-import PostDetail from './pages/PostDetail.jsx';
-import RollingPaperDetail from './pages/RollingPaperDetail.jsx';
-import UserProfile from './pages/UserProfile.jsx';
-import About from './pages/About.jsx';
-import Privacy from './pages/Privacy.jsx';
-import Terms from './pages/Terms.jsx';
-import ContentPolicy from './pages/ContentPolicy.jsx';
-import Contact from './pages/Contact.jsx';
-import Notices from './pages/Notices.jsx';
-import Admin from './pages/Admin.jsx';
-import SignUp from './pages/SignUp.jsx';
-import SignIn from './pages/SignIn.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import UpdatePassword from './pages/UpdatePassword.jsx';
-import ProfilePage from './pages/ProfilePage.jsx';
-import NotFound from './pages/NotFound.jsx';
+
+const PostDetail = lazy(() => import('./pages/PostDetail.jsx'));
+const RollingPaperDetail = lazy(() => import('./pages/RollingPaperDetail.jsx'));
+const UserProfile = lazy(() => import('./pages/UserProfile.jsx'));
+const About = lazy(() => import('./pages/About.jsx'));
+const Privacy = lazy(() => import('./pages/Privacy.jsx'));
+const Terms = lazy(() => import('./pages/Terms.jsx'));
+const ContentPolicy = lazy(() => import('./pages/ContentPolicy.jsx'));
+const Contact = lazy(() => import('./pages/Contact.jsx'));
+const Notices = lazy(() => import('./pages/Notices.jsx'));
+const Admin = lazy(() => import('./pages/Admin.jsx'));
+const SignUp = lazy(() => import('./pages/SignUp.jsx'));
+const SignIn = lazy(() => import('./pages/SignIn.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const UpdatePassword = lazy(() => import('./pages/UpdatePassword.jsx'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
 export default function App() {
   return (
@@ -26,25 +28,27 @@ export default function App() {
       <Header />
       <WelcomeGate />
       <main>
-        <Routes>
-          <Route path="/" element={<Board />} />
-          <Route path="/post/:id" element={<PostDetail />} />
-          <Route path="/paper/:id" element={<RollingPaperDetail />} />
-          <Route path="/user/:id" element={<UserProfile />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/content-policy" element={<ContentPolicy />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/notices" element={<Notices />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<div className="empty">불러오는 중...</div>}>
+          <Routes>
+            <Route path="/" element={<Board />} />
+            <Route path="/post/:id" element={<PostDetail />} />
+            <Route path="/paper/:id" element={<RollingPaperDetail />} />
+            <Route path="/user/:id" element={<UserProfile />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/content-policy" element={<ContentPolicy />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/notices" element={<Notices />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/signup" element={<SignUp />} />
+            <Route path="/signin" element={<SignIn />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/update-password" element={<UpdatePassword />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
       <Footer />
     </>
