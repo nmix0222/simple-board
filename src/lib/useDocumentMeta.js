@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const SITE_NAME = '우리들의 게시판';
+const SITE_NAME = '온라인 롤링페이퍼 커뮤니티';
 const DEFAULT_TITLE = `${SITE_NAME} - 자유롭게 소통하는 커뮤니티`;
 const DEFAULT_DESCRIPTION = '연예인, 개그, 유머, 스포츠, 게임 등 다양한 분야 게시판과 패스키로 보호되는 롤링페이퍼를 무료로 이용하세요.';
 

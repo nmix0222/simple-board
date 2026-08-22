@@ -12,7 +12,7 @@ export default function Footer() {
         <Link to="/contact">문의하기</Link>
         <Link to="/admin" style={{ opacity: 0.5 }}>관리자</Link>
       </div>
-      <div style={{ marginTop: 8 }}>© {new Date().getFullYear()} 우리들의 게시판</div>
+      <div style={{ marginTop: 8 }}>© {new Date().getFullYear()} 온라인 롤링페이퍼 커뮤니티</div>
     </footer>
   );
 }

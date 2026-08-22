@@ -1,12 +1,12 @@
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 
 export default function ContentPolicy() {
-  useDocumentMeta('콘텐츠 정책', '우리들의 게시판에서 허용되지 않는 콘텐츠와 신고 처리 절차를 안내합니다.');
+  useDocumentMeta('콘텐츠 정책', '온라인 롤링페이퍼 커뮤니티에서 허용되지 않는 콘텐츠와 신고 처리 절차를 안내합니다.');
   return (
     <div className="content-page">
       <h2>콘텐츠 정책</h2>
       <p>
-        우리들의 게시판은 누구나 안전하게 이용할 수 있는 커뮤니티를 지향합니다. 아래에 해당하는
+        온라인 롤링페이퍼 커뮤니티은 누구나 안전하게 이용할 수 있는 커뮤니티를 지향합니다. 아래에 해당하는
         콘텐츠는 허용되지 않으며, 발견 시 신고 접수 후 관리자 검토를 거쳐 삭제될 수 있습니다.
       </p>
 
