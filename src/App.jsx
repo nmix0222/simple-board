@@ -9,6 +9,9 @@ import UserProfile from './pages/UserProfile.jsx';
 import About from './pages/About.jsx';
 import Privacy from './pages/Privacy.jsx';
 import Terms from './pages/Terms.jsx';
+import ContentPolicy from './pages/ContentPolicy.jsx';
+import Contact from './pages/Contact.jsx';
+import Notices from './pages/Notices.jsx';
 import Admin from './pages/Admin.jsx';
 import SignUp from './pages/SignUp.jsx';
 import SignIn from './pages/SignIn.jsx';
@@ -30,6 +33,9 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="/content-policy" element={<ContentPolicy />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/notices" element={<Notices />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/signin" element={<SignIn />} />

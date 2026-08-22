@@ -2,14 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
+import { formatDateTime as formatDate } from '../lib/format.js';
 
 const CARD_COLORS = ['#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5'];
-
-function formatDate(ts) {
-  const d = new Date(ts);
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export default function RollingPaperDetail() {
   const { id } = useParams();
@@ -26,6 +21,12 @@ export default function RollingPaperDetail() {
   const [msgAnonymous, setMsgAnonymous] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    setUnlocked(false);
+    setPaper(null);
+    setMessages(null);
+    setPasskeyInput('');
+    setError('');
     supabase.from('rolling_papers_public').select('*').eq('id', id).single().then(({ data }) => {
       setPaper(data || null);
       setLoading(false);
@@ -33,14 +34,13 @@ export default function RollingPaperDetail() {
         setUnlocked(true);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, isAdmin]);
 
   useEffect(() => {
     if (!unlocked) return;
     loadMessages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unlocked]);
+  }, [unlocked, id]);
 
   async function loadMessages() {
     const { data } = await supabase

@@ -3,23 +3,11 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import { generatePasskey } from '../hash.js';
+import { formatDateTime as formatDate, excerpt } from '../lib/format.js';
+import { TAGS, POST_COLORS, ROLLING_PAPER } from '../lib/constants.js';
 import AdSlot from '../components/AdSlot.jsx';
 
-const TAGS = ['일반', '질문', '정보', '잡담', '유머'];
-const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
-const ROLLING_PAPER = 'ROLLING_PAPER';
 const DRAFT_KEY = 'post-draft';
-
-function formatDate(ts) {
-  const d = new Date(ts);
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function excerpt(text, len = 80) {
-  if (!text) return '';
-  return text.length > len ? text.slice(0, len) + '…' : text;
-}
 
 export default function Board() {
   const { user } = useSupabaseAuth();
@@ -56,6 +44,10 @@ export default function Board() {
     loadPosts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTab, sortMode]);
+
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [currentTab, search, sortMode]);
 
   // 임시저장 불러오기 (글쓰기 창을 처음 열 때)
   useEffect(() => {
@@ -147,6 +139,9 @@ export default function Board() {
         });
         if (error) throw error;
         setNewPasskey(passkey);
+        setTitle('');
+        setContent('');
+        loadPosts();
       } else {
         const { error } = await supabase.from('posts').insert({
           category_id: categoryId,
@@ -174,6 +169,9 @@ export default function Board() {
   function closeWriteForm() {
     setShowWriteForm(false);
     setNewPasskey(null);
+    setTitle('');
+    setContent('');
+    setColor(POST_COLORS[0]);
   }
 
   if (!supabase) {

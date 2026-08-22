@@ -3,16 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import ReportButton from '../components/ReportButton.jsx';
+import { formatDateTime as formatDate } from '../lib/format.js';
+import { TAGS, POST_COLORS } from '../lib/constants.js';
 
-const TAGS = ['일반', '질문', '정보', '잡담', '유머'];
-const POST_COLORS = ['#ffffff', '#fff4cc', '#ffe0e6', '#dbeafe', '#dcfce7', '#f3e8ff', '#ffedd5', '#e0f2fe'];
 const VIEWED_KEY = 'viewed-posts';
-
-function formatDate(ts) {
-  const d = new Date(ts);
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export default function PostDetail() {
   const { id } = useParams();
