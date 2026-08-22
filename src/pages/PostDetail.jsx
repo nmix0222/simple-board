@@ -7,6 +7,7 @@ import { formatDateTime as formatDate, excerpt } from '../lib/format.js';
 import { TAGS, POST_COLORS } from '../lib/constants.js';
 import { useDocumentMeta } from '../lib/useDocumentMeta.js';
 import { isBannedWordError, reportBannedWordViolation } from '../lib/bannedWordPenalty.js';
+import { storagePathFromUrl, removePostImage } from '../lib/postImages.js';
 
 const VIEWED_KEY = 'viewed-posts';
 
@@ -175,12 +176,6 @@ export default function PostDetail() {
     setEditImageRemoved(true);
   }
 
-  function storagePathFromUrl(url) {
-    const marker = '/post-images/';
-    const i = url?.indexOf(marker);
-    return i >= 0 ? url.slice(i + marker.length) : null;
-  }
-
   async function saveEdit(e) {
     e.preventDefault();
     if (!editTitle.trim() || !editContent.trim()) {
@@ -225,6 +220,7 @@ export default function PostDetail() {
       }
       const { error: delErr } = await supabase.from('posts').delete().eq('id', id);
       if (delErr) { alert('삭제에 실패했습니다: ' + delErr.message); return; }
+      if (post.image_url) await removePostImage(supabase, post.image_url);
       await supabase.rpc('log_admin_action', { p_action: 'hard_delete_post', p_target_type: 'post', p_target_id: id, p_detail: { title: post.title } });
     } else {
       if (!confirm('이 글을 삭제하시겠습니까?')) return;

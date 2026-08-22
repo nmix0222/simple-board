@@ -59,6 +59,7 @@ drop function if exists notify_on_rolling_paper_message() cascade;
 drop function if exists notify_on_message_comment() cascade;
 drop function if exists bump_comment_like_count() cascade;
 drop function if exists auto_flag_on_report_threshold() cascade;
+drop function if exists enforce_report_rate_limit() cascade;
 drop function if exists enforce_message_comment_content_rules() cascade;
 drop function if exists enforce_rolling_paper_message_update_rules() cascade;
 drop trigger if exists on_auth_user_created on auth.users;
@@ -1032,6 +1033,29 @@ alter table reports enable row level security;
 create policy reports_select_own_or_admin on reports for select using (reporter_id = auth.uid() or is_admin());
 create policy reports_insert_own on reports for insert with check (auth.uid() is not null and reporter_id = auth.uid());
 create policy reports_update_admin_only on reports for update using (is_admin());
+
+-- 신고는 같은 대상 중복만 막혀 있었고(reports_no_duplicate), 서로 다른 대상을 순식간에 여러 건
+-- 신고하는 건 아무 제한이 없었다. 3명 신고 시 자동 숨김 트리거와 결합하면 공격 벡터가 되므로
+-- 관리자를 제외하고 분당 신고 건수를 제한한다.
+create function enforce_report_rate_limit() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_recent_count integer;
+begin
+  if not is_admin() then
+    select count(*) into v_recent_count from reports
+      where reporter_id = new.reporter_id and created_at > now() - interval '1 minute';
+    if v_recent_count >= 5 then
+      raise exception '너무 빠르게 신고했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger reports_enforce_rate_limit
+  before insert on reports
+  for each row execute function enforce_report_rate_limit();
 
 -- 서로 다른 사용자 3명 이상이 같은 글/댓글을 신고하면, 관리자가 확인하기 전까지
 -- 자동으로 다른 사용자에게 숨긴다 (작성자 본인과 관리자에게는 계속 보임).

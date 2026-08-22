@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
 import { formatDateTime as formatDate } from '../lib/format.js';
+import { removePostImage } from '../lib/postImages.js';
 
 const REASON_LABELS = {
   abuse: '욕설', defamation: '악의적인 비방', sexual: '성적인 콘텐츠',
@@ -135,7 +136,11 @@ export default function Admin() {
     }
     if (!confirm(`"${cat.name}" 카테고리를 삭제하시겠습니까?`)) return;
     const { error } = await supabase.from('categories').delete().eq('id', cat.id);
-    if (error) { alert(error.message); return; }
+    if (error) {
+      // 게시글은 위에서 먼저 확인했지만, 롤링페이퍼가 이 카테고리를 참조하고 있으면 여기서 걸린다.
+      alert(error.code === '23503' ? `"${cat.name}" 카테고리를 참조하는 글(또는 롤링페이퍼)이 있어 삭제할 수 없습니다.` : error.message);
+      return;
+    }
     await logAdmin('delete_category', 'category', cat.id, { name: cat.name });
     loadCategories();
   }
@@ -185,6 +190,7 @@ export default function Admin() {
     }
     const { error: err } = await supabase.from('posts').delete().eq('id', post.id);
     if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
+    if (post.image_url) await removePostImage(supabase, post.image_url);
     await logAdmin('hard_delete_post', 'post', post.id, { title: post.title });
     setPosts(posts.filter(p => p.id !== post.id));
   }
@@ -217,10 +223,16 @@ export default function Admin() {
   async function deleteReportedContent(report) {
     if (!confirm('신고된 콘텐츠를 삭제하시겠습니까?')) return;
     const table = { post: 'posts', comment: 'comments', rolling_paper: 'rolling_papers', rolling_paper_message: 'rolling_paper_messages' }[report.target_type];
+    let imageUrl = null;
+    if (report.target_type === 'post') {
+      const { data } = await supabase.from('posts').select('image_url').eq('id', report.target_id).single();
+      imageUrl = data?.image_url || null;
+    }
     if (table) {
       const { error: err } = await supabase.from(table).delete().eq('id', report.target_id);
       if (err) { alert('삭제에 실패했습니다: ' + err.message); return; }
     }
+    if (imageUrl) await removePostImage(supabase, imageUrl);
     await logAction(report, 'resolved', 'delete_content');
   }
 
