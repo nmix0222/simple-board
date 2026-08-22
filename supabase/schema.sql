@@ -49,6 +49,8 @@ drop function if exists notify_on_comment() cascade;
 drop function if exists notify_on_rolling_paper_message() cascade;
 drop function if exists notify_on_message_comment() cascade;
 drop function if exists bump_comment_like_count() cascade;
+drop function if exists enforce_message_comment_content_rules() cascade;
+drop function if exists enforce_rolling_paper_message_update_rules() cascade;
 drop trigger if exists on_auth_user_created on auth.users;
 
 -- Supabase는 보통 pgcrypto를 extensions 스키마에 설치한다. 아래 함수들의
@@ -598,6 +600,7 @@ create policy messages_delete_admin_only on rolling_paper_messages for delete us
 create policy messages_no_direct_insert on rolling_paper_messages for insert with check (false);
 
 -- 게시판 목록에서 "메시지 N개"를 보여주기 위한 카운터. 매번 count(*) 하지 않도록 비정규화해서 유지한다.
+-- is_deleted 토글(소프트 삭제/복구)로도 개수가 정확히 맞도록 UPDATE도 함께 처리한다.
 create function bump_rolling_paper_message_count() returns trigger
 language plpgsql security definer set search_path = public, extensions as $$
 begin
@@ -605,6 +608,10 @@ begin
     update rolling_papers set message_count = message_count + 1 where id = new.rolling_paper_id;
   elsif tg_op = 'DELETE' then
     update rolling_papers set message_count = greatest(message_count - 1, 0) where id = old.rolling_paper_id;
+  elsif tg_op = 'UPDATE' and new.is_deleted and not old.is_deleted then
+    update rolling_papers set message_count = greatest(message_count - 1, 0) where id = new.rolling_paper_id;
+  elsif tg_op = 'UPDATE' and not new.is_deleted and old.is_deleted then
+    update rolling_papers set message_count = message_count + 1 where id = new.rolling_paper_id;
   end if;
   return null;
 end;
@@ -613,6 +620,27 @@ $$;
 create trigger rolling_paper_messages_after_change
   after insert or delete on rolling_paper_messages
   for each row execute function bump_rolling_paper_message_count();
+create trigger rolling_paper_messages_after_soft_delete
+  after update on rolling_paper_messages
+  for each row execute function bump_rolling_paper_message_count();
+
+-- 롤링페이퍼 메시지 수정 시 금칙어 검사 (등록 시엔 post_rolling_paper_message()에서 이미 검사함)
+create function enforce_rolling_paper_message_update_rules() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_bad_word text;
+begin
+  select word into v_bad_word from banned_words where new.content ilike '%' || word || '%' limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 수정할 수 없습니다.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger rolling_paper_messages_enforce_update_rules
+  before update of content on rolling_paper_messages
+  for each row execute function enforce_rolling_paper_message_update_rules();
 
 -- 롤링페이퍼에 메시지가 달리면 만든 사람에게 알림
 create function notify_on_rolling_paper_message() returns trigger
@@ -718,7 +746,26 @@ create table rolling_paper_message_comments (
 alter table rolling_paper_message_comments enable row level security;
 create policy rpmc_select_own_or_admin on rolling_paper_message_comments for select using (author_id = auth.uid() or is_admin());
 create policy rpmc_insert_own on rolling_paper_message_comments for insert with check (auth.uid() is not null and author_id = auth.uid());
+create policy rpmc_update_own on rolling_paper_message_comments for update using (author_id = auth.uid());
 create policy rpmc_delete_own_or_admin on rolling_paper_message_comments for delete using (author_id = auth.uid() or is_admin());
+
+-- 답장 등록/수정 시 금칙어 검사 (지금까지 이 테이블엔 내용 검증이 전혀 없었다)
+create function enforce_message_comment_content_rules() returns trigger
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_bad_word text;
+begin
+  select word into v_bad_word from banned_words where new.content ilike '%' || word || '%' limit 1;
+  if v_bad_word is not null then
+    raise exception '금칙어가 포함되어 있어 등록할 수 없습니다.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger message_comments_enforce_rules
+  before insert or update of content on rolling_paper_message_comments
+  for each row execute function enforce_message_comment_content_rules();
 
 -- 내 롤링페이퍼 메시지에 답장이 달리면 알림
 create function notify_on_message_comment() returns trigger

@@ -59,6 +59,10 @@ export default function RollingPaperDetail() {
   const [replyAnonymous, setReplyAnonymous] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [printMode, setPrintMode] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingMessageContent, setEditingMessageContent] = useState('');
+  const [editingReplyId, setEditingReplyId] = useState(null);
+  const [editingReplyContent, setEditingReplyContent] = useState('');
 
   useDocumentMeta(paper?.title, paper?.description || '롤링페이퍼에 마음을 담은 메시지를 남겨보세요.');
 
@@ -205,6 +209,60 @@ export default function RollingPaperDetail() {
     });
     if (err) { alert(err.message); return; }
     setReplyText('');
+    loadMessages();
+  }
+
+  function startEditMessage(m) {
+    setEditingMessageId(m.id);
+    setEditingMessageContent(m.content);
+  }
+
+  function cancelEditMessage() {
+    setEditingMessageId(null);
+    setEditingMessageContent('');
+  }
+
+  async function saveEditMessage(e, messageId) {
+    e.preventDefault();
+    if (!editingMessageContent.trim()) { alert('내용을 입력해주세요.'); return; }
+    const { error: err } = await supabase.from('rolling_paper_messages').update({ content: editingMessageContent.trim() }).eq('id', messageId);
+    if (err) { alert(err.message); return; }
+    cancelEditMessage();
+    loadMessages();
+  }
+
+  async function deleteMessage(messageId) {
+    if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
+    if (isAdmin) {
+      await supabase.from('rolling_paper_messages').delete().eq('id', messageId);
+    } else {
+      await supabase.from('rolling_paper_messages').update({ is_deleted: true }).eq('id', messageId);
+    }
+    loadMessages();
+  }
+
+  function startEditReply(c) {
+    setEditingReplyId(c.id);
+    setEditingReplyContent(c.content);
+  }
+
+  function cancelEditReply() {
+    setEditingReplyId(null);
+    setEditingReplyContent('');
+  }
+
+  async function saveEditReply(e, replyId) {
+    e.preventDefault();
+    if (!editingReplyContent.trim()) { alert('내용을 입력해주세요.'); return; }
+    const { error: err } = await supabase.from('rolling_paper_message_comments').update({ content: editingReplyContent.trim() }).eq('id', replyId);
+    if (err) { alert(err.message); return; }
+    cancelEditReply();
+    loadMessages();
+  }
+
+  async function deleteReply(replyId) {
+    if (!confirm('답장을 삭제하시겠습니까?')) return;
+    await supabase.from('rolling_paper_message_comments').delete().eq('id', replyId);
     loadMessages();
   }
 
@@ -410,10 +468,27 @@ export default function RollingPaperDetail() {
                   key={m.id}
                 >
                   {isGraduation && !printMode && <span className="pin-dot" aria-hidden="true">📌</span>}
-                  <div className="message-author">{m.authorName}</div>
-                  <div className="message-content">{m.content}</div>
-                  {!printMode && (
-                    <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                  {editingMessageId === m.id ? (
+                    <form onSubmit={e => saveEditMessage(e, m.id)}>
+                      <textarea
+                        aria-label="메시지 수정"
+                        value={editingMessageContent}
+                        onChange={e => setEditingMessageContent(e.target.value)}
+                        style={{ width: '100%', minHeight: 60, fontSize: 13 }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                        <button className="btn-primary" type="submit" style={{ width: 'auto', padding: '4px 12px', fontSize: 12 }}>저장</button>
+                        <button type="button" className="btn-secondary" style={{ width: 'auto', padding: '4px 12px', fontSize: 12 }} onClick={cancelEditMessage}>취소</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="message-author">{m.authorName}</div>
+                      <div className="message-content">{m.content}</div>
+                    </>
+                  )}
+                  {!printMode && editingMessageId !== m.id && (
+                    <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
                       <button
                         type="button"
                         className="link-btn"
@@ -430,6 +505,12 @@ export default function RollingPaperDetail() {
                       >
                         💬 답장 {m.comments.length}
                       </button>
+                      {user && user.id === m.author_id && (
+                        <button type="button" className="link-btn" style={{ fontSize: 11, opacity: 0.75 }} onClick={() => startEditMessage(m)}>수정</button>
+                      )}
+                      {user && (user.id === m.author_id || isAdmin) && (
+                        <button type="button" className="link-btn" style={{ fontSize: 11, color: 'var(--danger)', opacity: 0.75 }} onClick={() => deleteMessage(m.id)}>삭제</button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -448,10 +529,26 @@ export default function RollingPaperDetail() {
                 {target.comments.length === 0 ? (
                   <div className="comment-loading">아직 답장이 없습니다.</div>
                 ) : (
-                  target.comments.map((c, i) => (
-                    <div className="comment-item" key={i}>
-                      <span className="comment-author">{c.authorName}</span>
-                      {c.content}
+                  target.comments.map(c => (
+                    <div className="comment-item" key={c.id}>
+                      {editingReplyId === c.id ? (
+                        <form onSubmit={e => saveEditReply(e, c.id)} style={{ display: 'flex', gap: 6 }}>
+                          <input type="text" aria-label="답장 수정" value={editingReplyContent} onChange={e => setEditingReplyContent(e.target.value)} style={{ flex: 1 }} />
+                          <button className="btn-primary" type="submit" style={{ width: 'auto' }}>저장</button>
+                          <button type="button" className="btn-secondary" style={{ width: 'auto' }} onClick={cancelEditReply}>취소</button>
+                        </form>
+                      ) : (
+                        <>
+                          <span className="comment-author">{c.authorName}</span>
+                          {c.content}
+                          {user && user.id === c.author_id && (
+                            <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditReply(c)}>수정</button>
+                          )}
+                          {user && (user.id === c.author_id || isAdmin) && (
+                            <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteReply(c.id)}>삭제</button>
+                          )}
+                        </>
+                      )}
                     </div>
                   ))
                 )}
