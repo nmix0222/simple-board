@@ -549,6 +549,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id uuid;
   v_row rolling_papers_public;
+  v_recent_count integer;
 begin
   if auth.uid() is null then
     raise exception '로그인이 필요합니다';
@@ -556,6 +557,15 @@ begin
   if not is_active_user() then
     raise exception '이용이 제한된 계정입니다';
   end if;
+
+  if not is_admin() then
+    select count(*) into v_recent_count from rolling_papers
+      where creator_id = auth.uid() and created_at > now() - interval '30 seconds';
+    if v_recent_count > 0 then
+      raise exception '너무 빠르게 롤링페이퍼를 등록했습니다. 잠시 후 다시 시도해주세요.';
+    end if;
+  end if;
+
   insert into rolling_papers (creator_id, category_id, title, target_subject, description, visibility, passkey_hash, allow_anonymous, deadline)
   values (
     auth.uid(), p_category_id, p_title, p_target_subject, p_description, p_visibility,
