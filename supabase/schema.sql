@@ -36,6 +36,8 @@ drop function if exists can_access_rolling_paper(uuid) cascade;
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text) cascade;
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- Supabase는 보통 pgcrypto를 extensions 스키마에 설치한다. 아래 함수들의
+-- search_path에 extensions를 함께 넣어서 이미 설치된 위치와 무관하게 digest()를 찾게 한다.
 create extension if not exists pgcrypto;
 
 -- ------------------------------------------------------------
@@ -59,7 +61,7 @@ $$;
 
 -- 회원가입 시 auth.users에 자동으로 profiles 행 생성 (닉네임은 회원가입 시 metadata로 전달)
 create function handle_new_user() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 begin
   insert into profiles (id, nickname)
   values (new.id, coalesce(new.raw_user_meta_data->>'nickname', '사용자' || substr(new.id::text, 1, 8)));
@@ -172,7 +174,7 @@ create policy posts_delete_admin_only on posts for delete using (is_admin());
 
 -- 조회수 증가 (누구나, 세션당 1회는 클라이언트에서 제어)
 create function increment_post_view(p_post_id uuid) returns void
-language sql security definer set search_path = public as $$
+language sql security definer set search_path = public, extensions as $$
   update posts set view_count = view_count + 1 where id = p_post_id and not is_deleted;
 $$;
 grant execute on function increment_post_view(uuid) to anon, authenticated;
@@ -209,7 +211,7 @@ create trigger comments_enforce_depth
   for each row execute function enforce_comment_depth();
 
 create function bump_post_comment_count() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 begin
   if tg_op = 'INSERT' then
     update posts set comment_count = comment_count + 1 where id = new.post_id;
@@ -245,7 +247,7 @@ create table post_likes (
 );
 
 create function bump_post_vote_counts() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 begin
   if tg_op = 'INSERT' then
     update posts set
@@ -331,7 +333,7 @@ create function create_rolling_paper(
   p_title text, p_category_id uuid, p_target_subject text, p_description text,
   p_visibility text, p_passkey text, p_allow_anonymous boolean, p_deadline timestamptz
 ) returns rolling_papers_public
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id uuid;
 begin
@@ -352,7 +354,7 @@ grant execute on function create_rolling_paper(text, uuid, text, text, text, tex
 
 -- 패스키 확인 (메시지 작성 폼을 보여줄지 판단하는 용도)
 create function verify_rolling_paper_passkey(p_paper_id uuid, p_passkey text) returns boolean
-language sql security definer set search_path = public as $$
+language sql security definer set search_path = public, extensions as $$
   select exists (
     select 1 from rolling_papers
     where id = p_paper_id
@@ -364,7 +366,7 @@ grant execute on function verify_rolling_paper_passkey(uuid, text) to anon, auth
 
 -- 관리자가 패스키 없이 롤링페이퍼에 실제 접근 가능한지 여부(역할 기반) 확인용
 create function can_access_rolling_paper(p_paper_id uuid) returns boolean
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, extensions as $$
   select is_admin() or exists (
     select 1 from rolling_papers where id = p_paper_id and visibility = 'public'
   );
@@ -404,7 +406,7 @@ grant select on rolling_paper_messages_public to anon, authenticated;
 create function post_rolling_paper_message(
   p_paper_id uuid, p_content text, p_is_anonymous boolean, p_passkey text default null
 ) returns rolling_paper_messages_public
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_paper rolling_papers%rowtype;
   v_id uuid;
