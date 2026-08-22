@@ -34,6 +34,7 @@ drop function if exists create_rolling_paper(text, uuid, text, text, text, text,
 drop function if exists verify_rolling_paper_passkey(uuid, text) cascade;
 drop function if exists can_access_rolling_paper(uuid) cascade;
 drop function if exists post_rolling_paper_message(uuid, text, boolean, text) cascade;
+drop function if exists post_rolling_paper_message(uuid, text, boolean, text, text) cascade;
 drop trigger if exists on_auth_user_created on auth.users;
 
 -- Supabase는 보통 pgcrypto를 extensions 스키마에 설치한다. 아래 함수들의
@@ -387,6 +388,9 @@ create table rolling_paper_messages (
   author_id uuid not null references profiles(id) on delete cascade,
   content text not null,
   is_anonymous boolean not null default false,
+  -- 로그인 계정 닉네임과 별개로, 메시지마다 직접 입력하는 이름(예: "학번 이름").
+  -- 익명으로 남기면 null로 저장되고 화면엔 "익명"으로만 보인다.
+  display_name text,
   is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -403,14 +407,15 @@ create policy messages_no_direct_insert on rolling_paper_messages for insert wit
 create view rolling_paper_messages_public as
   select m.id, m.rolling_paper_id,
          case when m.is_anonymous then null else m.author_id end as author_id,
-         m.content, m.is_anonymous, m.is_deleted, m.created_at, m.updated_at
+         m.display_name, m.content, m.is_anonymous, m.is_deleted, m.created_at, m.updated_at
   from rolling_paper_messages m
   where not m.is_deleted or is_admin() or m.author_id = auth.uid();
 
 grant select on rolling_paper_messages_public to anon, authenticated;
 
 create function post_rolling_paper_message(
-  p_paper_id uuid, p_content text, p_is_anonymous boolean, p_passkey text default null
+  p_paper_id uuid, p_content text, p_is_anonymous boolean,
+  p_display_name text default null, p_passkey text default null
 ) returns rolling_paper_messages_public
 language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -438,15 +443,15 @@ begin
     end if;
   end if;
 
-  insert into rolling_paper_messages (rolling_paper_id, author_id, content, is_anonymous)
-  values (p_paper_id, auth.uid(), p_content, p_is_anonymous)
+  insert into rolling_paper_messages (rolling_paper_id, author_id, content, is_anonymous, display_name)
+  values (p_paper_id, auth.uid(), p_content, p_is_anonymous, nullif(trim(p_display_name), ''))
   returning id into v_id;
 
   select * into v_row from rolling_paper_messages_public where id = v_id;
   return v_row;
 end;
 $$;
-grant execute on function post_rolling_paper_message(uuid, text, boolean, text) to authenticated;
+grant execute on function post_rolling_paper_message(uuid, text, boolean, text, text) to authenticated;
 
 -- ------------------------------------------------------------
 -- 8. rolling_paper_reactions

@@ -44,6 +44,7 @@ export default function RollingPaperDetail() {
   const [passkeyInput, setPasskeyInput] = useState('');
   const [error, setError] = useState('');
   const [messages, setMessages] = useState(null);
+  const [msgName, setMsgName] = useState('');
   const [msgContent, setMsgContent] = useState('');
   const [msgAnonymous, setMsgAnonymous] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -129,7 +130,10 @@ export default function RollingPaperDetail() {
       const { data: profs } = await supabase.from('profiles').select('id, nickname').in('id', authorIds);
       nameMap = Object.fromEntries((profs || []).map(p => [p.id, p.nickname]));
     }
-    setMessages(rows.map(m => ({ ...m, authorName: m.is_anonymous ? '익명' : (nameMap[m.author_id] || '알 수 없음') })));
+    setMessages(rows.map(m => ({
+      ...m,
+      authorName: m.is_anonymous ? '익명' : (m.display_name || nameMap[m.author_id] || '알 수 없음')
+    })));
   }
 
   async function handleUnlock(e) {
@@ -146,14 +150,17 @@ export default function RollingPaperDetail() {
   async function handleAddMessage(e) {
     e.preventDefault();
     if (!user) { alert('로그인 후 이용해주세요.'); return; }
+    if (!msgAnonymous && !msgName.trim()) { alert('이름을 입력해주세요.'); return; }
     if (!msgContent.trim()) { alert('메시지 내용을 입력해주세요.'); return; }
     const { error: err } = await supabase.rpc('post_rolling_paper_message', {
       p_paper_id: id,
       p_content: msgContent.trim(),
       p_is_anonymous: msgAnonymous,
+      p_display_name: msgAnonymous ? null : msgName.trim(),
       p_passkey: paper.visibility === 'passkey' ? passkeyInput.trim().toUpperCase() : null
     });
     if (err) { alert(err.message); return; }
+    setMsgName('');
     setMsgContent('');
     loadMessages();
     if (isGraduation) fireConfetti();
@@ -279,6 +286,11 @@ export default function RollingPaperDetail() {
             <section className="write-box">
               <h2>메시지 남기기</h2>
               <form onSubmit={handleAddMessage}>
+                {!msgAnonymous && (
+                  <div className="row">
+                    <input type="text" placeholder="이름" value={msgName} onChange={e => setMsgName(e.target.value)} style={{ maxWidth: 160 }} />
+                  </div>
+                )}
                 <div className="row">
                   <textarea placeholder="따뜻한 메시지를 남겨주세요" value={msgContent} onChange={e => setMsgContent(e.target.value)} />
                 </div>
