@@ -11,6 +11,16 @@ import AdSlot from '../components/AdSlot.jsx';
 
 const DRAFT_KEY = 'post-draft';
 
+// 정읍고 통합 페이지(허브)로만 안내하기 위해, 게시판 목록에는 개별 반/전체선생님 롤링페이퍼를
+// 노출하지 않는다. 데이터/메시지/직접 링크는 전혀 건드리지 않고 목록 표시에서만 제외한다.
+const HIDDEN_FROM_LIST_IDS = new Set([
+  '5dcc2fd1-9f7e-4ac2-997f-5d0004e97963',
+  '2141d98f-bff6-4d6b-9590-fce705ca58bb',
+  '5762e3a0-a92f-418e-b436-daf8ae0c64ed',
+  'f0484365-7144-47fa-ad58-8ab033ca3fce',
+  'f87bb8e5-8a09-4e56-8ac0-668c1d7ddc9d'
+]);
+
 export default function Board() {
   const { user } = useSupabaseAuth();
   const { theme } = useTheme();
@@ -110,7 +120,11 @@ export default function Board() {
     if (currentTab === '롤링페이퍼') {
       const { data, error } = await supabase.from('rolling_papers_public').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
       const now = Date.now();
-      if (!error) setPapers((data || []).filter(p => !p.deadline || new Date(p.deadline).getTime() > now));
+      if (!error) {
+        setPapers((data || []).filter(p =>
+          !HIDDEN_FROM_LIST_IDS.has(p.id) && (!p.deadline || new Date(p.deadline).getTime() > now)
+        ));
+      }
       setLoading(false);
       return;
     }
