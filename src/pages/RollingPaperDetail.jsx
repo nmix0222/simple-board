@@ -85,7 +85,11 @@ export default function RollingPaperDetail() {
   }, [unlocked, id]);
 
   useEffect(() => {
-    if (unlocked && isGraduation) fireConfetti();
+    if (!unlocked || !isGraduation) return;
+    fireConfetti();
+    if (audioRef.current) {
+      audioRef.current.play().then(() => setMusicPlaying(true)).catch(() => setMusicPlaying(false));
+    }
   }, [unlocked, isGraduation]);
 
   useEffect(() => {
