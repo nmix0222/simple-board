@@ -153,10 +153,16 @@ export default function PostDetail() {
   }
 
   async function handleDelete() {
-    if (!confirm('이 글을 삭제하시겠습니까?')) return;
     if (isAdmin) {
+      const typed = prompt(`이 작업은 되돌릴 수 없고 댓글도 함께 사라집니다.\n완전히 삭제하려면 제목을 그대로 입력해주세요: "${post.title}"`);
+      if (typed !== post.title) {
+        if (typed !== null) alert('제목이 일치하지 않아 삭제가 취소되었습니다.');
+        return;
+      }
       await supabase.from('posts').delete().eq('id', id);
+      await supabase.rpc('log_admin_action', { p_action: 'hard_delete_post', p_target_type: 'post', p_target_id: id, p_detail: { title: post.title } });
     } else {
+      if (!confirm('이 글을 삭제하시겠습니까?')) return;
       await supabase.from('posts').update({ is_deleted: true }).eq('id', id);
     }
     navigate('/');
@@ -194,10 +200,13 @@ export default function PostDetail() {
     load();
   }
 
-  async function deleteComment(commentId) {
+  async function deleteComment(commentId, authorId) {
     if (!confirm('댓글을 삭제하시겠습니까?')) return;
     if (isAdmin) {
       await supabase.from('comments').delete().eq('id', commentId);
+      if (user && authorId !== user.id) {
+        await supabase.rpc('log_admin_action', { p_action: 'delete_comment', p_target_type: 'comment', p_target_id: commentId });
+      }
     } else {
       await supabase.from('comments').update({ is_deleted: true }).eq('id', commentId);
     }
@@ -317,7 +326,7 @@ export default function PostDetail() {
                     <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditComment(c)}>수정</button>
                   )}
                   {user && (user.id === c.author_id || isAdmin) && (
-                    <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(c.id)}>삭제</button>
+                    <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(c.id, c.author_id)}>삭제</button>
                   )}
                 </>
               )}
@@ -346,7 +355,7 @@ export default function PostDetail() {
                       <button type="button" className="link-btn" style={{ marginLeft: 8 }} onClick={() => startEditComment(r)}>수정</button>
                     )}
                     {user && (user.id === r.author_id || isAdmin) && (
-                      <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(r.id)}>삭제</button>
+                      <button type="button" className="link-btn" style={{ marginLeft: 8, color: 'var(--danger)' }} onClick={() => deleteComment(r.id, r.author_id)}>삭제</button>
                     )}
                   </>
                 )}

@@ -173,7 +173,11 @@ export default function Admin() {
   }
 
   async function hardDelete(post) {
-    if (!confirm('완전히 삭제하시겠습니까?')) return;
+    const typed = prompt(`이 작업은 되돌릴 수 없고 댓글도 함께 사라집니다.\n완전히 삭제하려면 제목을 그대로 입력해주세요: "${post.title}"`);
+    if (typed !== post.title) {
+      if (typed !== null) alert('제목이 일치하지 않아 삭제가 취소되었습니다.');
+      return;
+    }
     await supabase.from('posts').delete().eq('id', post.id);
     await logAdmin('hard_delete_post', 'post', post.id, { title: post.title });
     setPosts(posts.filter(p => p.id !== post.id));
