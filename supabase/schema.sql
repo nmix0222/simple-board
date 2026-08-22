@@ -548,6 +548,11 @@ select cron.schedule(
   $cron$ update rolling_papers set is_deleted = true where deadline is not null and deadline < now() and not is_deleted; $cron$
 );
 
+-- ------------------------------------------------------------
+-- 15. 실시간 반영: 게시글이 삭제/등록되면 다른 사용자 화면에도 새로고침 없이 즉시 반영
+-- ------------------------------------------------------------
+alter publication supabase_realtime add table posts;
+
 -- ============================================================
 -- 마지막 1회: 관리자 지정 (회원가입 후 아래를 직접 실행하세요)
 -- update profiles set role = 'admin'

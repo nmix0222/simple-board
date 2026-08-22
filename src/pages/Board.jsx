@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useSupabaseAuth } from '../SupabaseAuthContext.jsx';
@@ -53,6 +53,20 @@ export default function Board() {
   useEffect(() => {
     setVisibleCount(20);
   }, [currentTab, search, sortMode]);
+
+  // 다른 사람이 글을 쓰거나 삭제하면 실시간으로 목록에 반영 (새로고침 불필요)
+  const loadPostsRef = useRef(loadPosts);
+  loadPostsRef.current = loadPosts;
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel('posts-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+        loadPostsRef.current();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, []);
 
   // 임시저장 불러오기 (글쓰기 창을 처음 열 때)
   useEffect(() => {
