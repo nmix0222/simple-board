@@ -33,6 +33,7 @@ export default function Board() {
   const [submitting, setSubmitting] = useState(false);
   const [newPasskey, setNewPasskey] = useState(null);
   const [deadline, setDeadline] = useState('');
+  const [customPasskey, setCustomPasskey] = useState('');
 
   const isRollingPaper = categoryId === ROLLING_PAPER;
 
@@ -155,10 +156,15 @@ export default function Board() {
       return;
     }
 
+    if (isRollingPaper && customPasskey.trim() && customPasskey.trim().length < 4) {
+      alert('패스키는 4자 이상 입력해주세요.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (isRollingPaper) {
-        const passkey = generatePasskey();
+        const passkey = customPasskey.trim() ? customPasskey.trim().toUpperCase() : generatePasskey();
         const { error } = await supabase.rpc('create_rolling_paper', {
           p_title: title.trim(),
           p_category_id: null,
@@ -174,6 +180,7 @@ export default function Board() {
         setTitle('');
         setContent('');
         setDeadline('');
+        setCustomPasskey('');
         loadPosts();
       } else {
         const { error } = await supabase.from('posts').insert({
@@ -206,6 +213,7 @@ export default function Board() {
     setContent('');
     setColor(POST_COLORS[0]);
     setDeadline('');
+    setCustomPasskey('');
   }
 
   if (!supabase) {
@@ -278,8 +286,18 @@ export default function Board() {
                       title="마감일 (선택) — 지나면 자동으로 정리됩니다"
                     />
                   </div>
+                  <div className="row">
+                    <input
+                      type="text"
+                      aria-label="패스키 직접 설정"
+                      placeholder="패스키 직접 설정 (선택, 4자 이상, 비워두면 자동 생성)"
+                      value={customPasskey}
+                      onChange={e => setCustomPasskey(e.target.value)}
+                      maxLength={20}
+                    />
+                  </div>
                   <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 2px 8px' }}>
-                    마감일을 선택하면 지난 뒤 새 메시지 작성이 막히고, 목록에서도 자동으로 정리됩니다 (선택 안 하면 계속 유지). 등록하면 6자리 패스키가 발급되며, 이 패스키를 아는 사람만 메시지를 남길 수 있어요.
+                    마감일을 선택하면 지난 뒤 새 메시지 작성이 막히고, 목록에서도 자동으로 정리됩니다 (선택 안 하면 계속 유지). 패스키를 직접 입력하지 않으면 6자리 패스키가 자동으로 발급되며, 이 패스키를 아는 사람만 메시지를 남길 수 있어요.
                   </p>
                 </>
               )}
